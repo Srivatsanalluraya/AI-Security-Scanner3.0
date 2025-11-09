@@ -9,6 +9,7 @@ import subprocess
 import sys
 import pathlib
 
+
 def run(cmd, cwd=None):
     """Run a subprocess command and return stdout/stderr/exitcode."""
     print(f"[run] {' '.join(cmd)}")
@@ -18,6 +19,7 @@ def run(cmd, cwd=None):
     if result.stderr:
         print(result.stderr, file=sys.stderr)
     return result
+
 
 def run_semgrep(workspace, outdir):
     """Run Semgrep on workspace and export SARIF report."""
@@ -30,6 +32,7 @@ def run_semgrep(workspace, outdir):
 
     result = run(cmd)
     return sarif_out, result.returncode
+
 
 def determine_severity(sarif_file):
     """Parse SARIF and return highest severity."""
@@ -49,12 +52,35 @@ def determine_severity(sarif_file):
 
     return {0: "none", 1: "low", 2: "medium", 3: "high"}[max_severity]
 
+
+def extract_findings(sarif_file):
+    """Parse SARIF for simple findings list."""
+    if not os.path.exists(sarif_file):
+        return []
+
+    with open(sarif_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    findings = []
+    for run in data.get("runs", []):
+        for result in run.get("results", []):
+            loc = result.get("locations", [{}])[0]
+            findings.append({
+                "level": result.get("level", "note"),
+                "message": result.get("message", {}).get("text", ""),
+                "path": loc.get("physicalLocation", {}).get("artifactLocation", {}).get("uri", ""),
+                "line": loc.get("physicalLocation", {}).get("region", {}).get("startLine", 1)
+            })
+    return findings
+
+
 def write_outputs(outdir, severity):
     """Write severity summary to outputs."""
     pathlib.Path(outdir).mkdir(exist_ok=True)
     with open(os.path.join(outdir, "severity.txt"), "w") as f:
         f.write(severity)
     print(f"Overall severity: {severity}")
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -67,11 +93,23 @@ def main():
     severity = determine_severity(sarif_file)
     write_outputs(args.outdir, severity)
 
-    # Exit code based on severity (for now: non-zero only if high)
-    if severity == "high":
+    findings = extract_findings(sarif_file)
+
+    # Create report
+    report = build_report(findings, args.outdir)
+
+    # Post PR summary (if applicable)
+    post_pr_summary(severity, len(findings))
+
+    # Apply policy
+    outcome = decide_outcome(severity, policy=os.getenv("INPUT_SEVERITY_POLICY", "default"))
+    print(f"Outcome: {outcome}")
+
+    # Exit codes
+    if outcome == "block":
         sys.exit(1)
     sys.exit(0)
 
+
 if __name__ == "__main__":
     main()
-
