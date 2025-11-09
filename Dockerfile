@@ -1,5 +1,7 @@
 FROM python:3.12-slim
 
+RUN ... && pip install --no-cache-dir semgrep==1.80.0
+
 # Set working directory
 WORKDIR /app
 ENV PYTHONPATH="/app"
