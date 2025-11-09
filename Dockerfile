@@ -2,6 +2,7 @@ FROM python:3.12-slim
 
 # Set working directory
 WORKDIR /app
+ENV PYTHONPATH="/app"
 
 # Copy all source files into /app/
 COPY src/ ./src/
