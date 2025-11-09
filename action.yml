@@ -1,0 +1,20 @@
+name: "AI-Vulnerability-Scanner"
+description: "Scan code, post insights to PR, and produce a human-friendly report."
+author: "YourName"
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  github_token:
+    description: "GITHUB_TOKEN or PAT with repo scope"
+    required: true
+
+runs:
+  using: "docker"
+  image: "Dockerfile"
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
