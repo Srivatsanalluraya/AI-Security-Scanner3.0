@@ -13,7 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Semgrep and any other Python dependencies
-RUN pip install --no-cache-dir semgrep==1.80.0
+RUN pip install --no-cache-dir semgrep==1.80.0 bandit==1.7.9 pip-audit==2.7.3
+
 
 # Copy action files
 COPY src/ ./src/
