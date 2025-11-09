@@ -8,10 +8,10 @@ def build_report(findings, outdir="out"):
     os.makedirs(os.path.dirname(report_md), exist_ok=True)
 
     with open(report_md, "w", encoding="utf-8") as f:
-        f.write(f"# Vulnerability Report\n\nGenerated: {ts}\n\n")
-        f.write(f"## Findings ({len(findings)})\n")
+        f.write(f"# Security Scan Report\n\nGenerated: {ts}\n\n")
+        f.write(f"## Total Findings: {len(findings)}\n\n")
         for fnd in findings:
-            f.write(f"- `{fnd['level'].upper()}` — `{fnd['path']}:{fnd['line']}` — {fnd['message']}\n")
+            f.write(f"- **{fnd['level'].upper()}** — `{fnd['path']}:{fnd['line']}` — {fnd['message']}\n")
 
+    print(f"Report written to {report_md}")
     return report_md
-
