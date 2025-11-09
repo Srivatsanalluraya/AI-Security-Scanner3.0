@@ -1,3 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-echo "AI-Vulnerability-Scanner action scaffold initialized."
+
+echo "Starting AI-Vulnerability-Scanner..."
+python3 /app/src/scanner.py
