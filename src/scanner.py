@@ -26,8 +26,9 @@ def run_semgrep(workspace, outdir):
     sarif_out = os.path.join(outdir, "sarif", "semgrep.sarif")
     pathlib.Path(os.path.join(outdir, "sarif")).mkdir(parents=True, exist_ok=True)
 
+    # Use Python-specific Semgrep ruleset:
     cmd = [
-        "semgrep", "--config", "p/ci", "--sarif", "--output", sarif_out, workspace
+        "semgrep", "--config", "p/python-security", "--sarif", "--output", sarif_out, workspace
     ]
 
     result = run(cmd)
@@ -89,13 +90,22 @@ def main():
     args = parser.parse_args()
 
     print(f"Scanning workspace: {args.workspace}")
+
+    # Diagnostic: See which files are being scanned
+    print("Files being scanned:")
+    for root, dirs, files in os.walk(args.workspace):
+        for file in files:
+            print(os.path.join(root, file))
+
+    # Run semgrep scan
     sarif_file, _ = run_semgrep(args.workspace, args.outdir)
+
+    # Process results
     severity = determine_severity(sarif_file)
     write_outputs(args.outdir, severity)
-
     findings = extract_findings(sarif_file)
 
-    # Create report
+    # Create human-friendly report
     report = build_report(findings, args.outdir)
 
     # Post PR summary (if applicable)
