@@ -1,17 +1,27 @@
-from src.policy import decide_outcome
-from src.reporters.pr_commenter import post_pr_summary
-from src.reporters.report_builder import build_report
-
+import sys
+import traceback
 import argparse
 import os
 import json
 import subprocess
-import sys
 import pathlib
 
+from src.policy import decide_outcome
+from src.reporters.pr_commenter import post_pr_summary
+from src.reporters.report_builder import build_report
 
+
+# --- Global crash hook for visibility ---
+sys.excepthook = lambda et, ev, tb: (
+    print("⚠️ Python Exception:", ''.join(traceback.format_exception(et, ev, tb))),
+    sys.exit(1)
+)
+print("✅ scanner.py loaded successfully")
+
+
+# --- Utility to run shell commands ---
 def run(cmd, cwd=None):
-    """Run a subprocess command and return stdout/stderr/exitcode."""
+    """Run a subprocess command and return CompletedProcess."""
     print(f"[run] {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
     if result.stdout:
@@ -21,32 +31,47 @@ def run(cmd, cwd=None):
     return result
 
 
-def run_semgrep(workspace, outdir):
+# --- SEMGREP ---
+def run_semgrep(workspace, outdir, include_pattern=None):
     """Run Semgrep on workspace and export SARIF report."""
     sarif_out = os.path.join(outdir, "sarif", "semgrep.sarif")
     pathlib.Path(os.path.join(outdir, "sarif")).mkdir(parents=True, exist_ok=True)
 
-    # Use Python-specific Semgrep ruleset:
     cmd = [
-        "semgrep", "--config", "p/python-security", "--sarif", "--output", sarif_out, workspace
+        "semgrep",
+        "--config", "p/python-security",
+        "--exclude", "**/.git/**",
+        "--exclude", "**/.github/**",
+        "--sarif",
+        "--output", sarif_out,
     ]
 
+    # Restrict scope if pattern provided
+    if include_pattern and include_pattern != ".":
+        if not any(ch in include_pattern for ch in ["*", "?"]):
+            include_glob = f"**/{include_pattern}"
+        else:
+            include_glob = include_pattern
+        cmd += ["--include", include_glob]
+
+    cmd.append(workspace)
     result = run(cmd)
     return sarif_out, result.returncode
 
+
+# --- BANDIT ---
 def run_bandit(workspace, outdir, include_pattern=None):
     """Run Bandit scan and export JSON report."""
     json_out = os.path.join(outdir, "bandit", "bandit.json")
     pathlib.Path(os.path.join(outdir, "bandit")).mkdir(parents=True, exist_ok=True)
 
-    cmd = ["bandit", "-r", workspace, "-f", "json", "-o", json_out]
-
-    if include_pattern and include_pattern != ".":
-        cmd = ["bandit", "-r", include_pattern, "-f", "json", "-o", json_out]
-
+    target = workspace if not include_pattern or include_pattern == "." else include_pattern
+    cmd = ["bandit", "-r", target, "-f", "json", "-o", json_out]
     result = run(cmd)
     return json_out, result.returncode
 
+
+# --- PIP-AUDIT ---
 def run_pip_audit(workspace, outdir):
     """Run pip-audit to detect known dependency vulnerabilities."""
     json_out = os.path.join(outdir, "pip_audit.json")
@@ -54,6 +79,7 @@ def run_pip_audit(workspace, outdir):
     return json_out, result.returncode
 
 
+# --- Parse SARIF ---
 def determine_severity(sarif_file):
     """Parse SARIF and return highest severity."""
     if not os.path.exists(sarif_file):
@@ -102,6 +128,7 @@ def write_outputs(outdir, severity):
     print(f"Overall severity: {severity}")
 
 
+# --- MAIN FUNCTION ---
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", default=os.getenv("GITHUB_WORKSPACE", "/github/workspace"))
@@ -116,20 +143,20 @@ def main():
     print(f"🔍 Scanning workspace: {workspace}")
     print(f"🎯 Target path (include pattern): {scan_path}")
 
-    # Diagnostic: list files for debugging
+    # Diagnostic listing
     print("📂 Files present in workspace:")
     for root, dirs, files in os.walk(workspace):
         for file in files:
             print(os.path.join(root, file))
 
-    # --- Run Semgrep scan ---
+    # --- SEMGREP ---
     print("\n🚀 Running Semgrep scan...")
     sarif_file, _ = run_semgrep(workspace, outdir, include_pattern=scan_path)
     severity = determine_severity(sarif_file)
     findings = extract_findings(sarif_file)
     print(f"✅ Semgrep findings: {len(findings)} | Highest severity: {severity.upper()}")
 
-    # --- Run Bandit scan ---
+    # --- BANDIT ---
     print("\n🔎 Running Bandit scan (Python security analyzer)...")
     try:
         bandit_file, _ = run_bandit(workspace, outdir, include_pattern=scan_path)
@@ -148,7 +175,7 @@ def main():
     except Exception as e:
         print(f"⚠️ Bandit scan failed or no findings: {e}")
 
-    # --- Run dependency audit (optional pip-audit) ---
+    # --- DEPENDENCY AUDIT ---
     if os.path.exists(os.path.join(workspace, "requirements.txt")):
         print("\n📦 Running dependency audit (pip-audit)...")
         try:
@@ -171,18 +198,37 @@ def main():
     else:
         print("📦 No requirements.txt found — skipping dependency scan.")
 
-    # --- Determine overall severity after merging all scans ---
+    # --- COMBINE & DETERMINE OVERALL SEVERITY ---
     combined_severity = "none"
-    if any(f["level"] == "error" or f["level"] == "high" for f in findings):
+    if any(f["level"] in ["error", "high"] for f in findings):
         combined_severity = "high"
-    elif any(f["level"] == "warning" or f["level"] == "medium" for f in findings):
+    elif any(f["level"] in ["warning", "medium"] for f in findings):
         combined_severity = "medium"
-    elif any(f["level"] == "note" or f["level"] == "low" for f in findings):
+    elif any(f["level"] in ["note", "low"] for f in findings):
         combined_severity = "low"
 
     write_outputs(outdir, combined_severity)
 
-    # --- Create final human-friendly report ---
-    print("\n🧾 Generating report...")
+    # --- REPORT ---
+    print("\n🧾 Generating final report...")
     report = build_report(findings, outdir)
+    print(f"📄 Report generated at: {report}")
 
+    # --- PR Summary ---
+    post_pr_summary(combined_severity, len(findings))
+
+    # --- Policy Decision ---
+    outcome = decide_outcome(combined_severity, policy=os.getenv("INPUT_SEVERITY_POLICY", "default"))
+    print(f"\n⚖️ Policy outcome: {outcome.upper()}")
+
+    # --- Exit Handling ---
+    if outcome == "block":
+        print("❌ Build blocked due to high severity findings.")
+        sys.exit(1)
+
+    print("✅ Scan complete — no blocking issues.")
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
