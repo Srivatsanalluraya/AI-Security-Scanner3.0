@@ -1,27 +1,30 @@
 FROM python:3.12-slim
 
-# Set working directory
 WORKDIR /app
-
-# Make sure /app is discoverable by Python
+ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH="/app"
 
-# Install essential system dependencies for Semgrep
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl ca-certificates build-essential libyaml-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Semgrep and any other Python dependencies
-RUN pip install --no-cache-dir semgrep==1.80.0 bandit==1.7.9 pip-audit==2.7.3
+# Install security tools
+RUN pip install --no-cache-dir \
+    semgrep==1.80.0 \
+    bandit==1.7.9 \
+    pip-audit==2.7.3
 
+# Install AI summarization tools + utilities
+RUN pip install --no-cache-dir \
+    transformers \
+    torch \
+    requests
 
-# Copy action files
-COPY src/ ./src/
-COPY rules/ ./rules/
+# Copy your scripts
+COPY scripts/ ./scripts/
 COPY entrypoint.sh /app/entrypoint.sh
 
-# Make entrypoint executable
 RUN chmod +x /app/entrypoint.sh
 
 ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]
