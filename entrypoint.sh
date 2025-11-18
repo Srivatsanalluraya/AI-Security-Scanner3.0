@@ -1,19 +1,46 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
+set -e
 
-echo "Starting AI-Vulnerability-Scanner..."
+echo "🔥 AI Vulnerability Scanner Starting..."
 
-# Ensure variables are passed properly
-SCAN_PATH="${INPUT_SCAN_PATH:-.}"
-WORKSPACE="${GITHUB_WORKSPACE:-/github/workspace}"
-OUTDIR="/app/out"
+SCAN_PATH=${1:-"."}
+echo "🔍 Scanning path: $SCAN_PATH"
 
-# Make sure GITHUB_TOKEN is exported
-export GITHUB_TOKEN="${INPUT_GITHUB_TOKEN:-${GITHUB_TOKEN:-}}"
+mkdir -p reports
 
-# Debug prints
-echo "Workspace: $WORKSPACE"
-echo "Scan path: $SCAN_PATH"
+echo "▶ Running Bandit..."
+bandit -r "$SCAN_PATH" -f json -o reports/bandit-report.json || true
 
-# Run scanner.py
-python3 /app/src/scanner.py --workspace "$WORKSPACE" --scan-path "$SCAN_PATH"
+echo "▶ Running Semgrep..."
+semgrep --config auto --json --output reports/semgrep-report.json "$SCAN_PATH" || true
+
+echo "▶ Running pip-audit..."
+pip-audit -f json -o reports/pip-audit-report.json || true
+
+echo "📝 Merging reports..."
+python /app/scripts/report_builder.py \
+  --reports-dir reports \
+  --out reports/final_report.json
+
+echo "🤖 Generating AI summary..."
+python /app/scripts/ai_summarizer.py
+
+echo "📄 Writing SARIF..."
+python /app/scripts/sarif_writer.py \
+  --input reports/final_report.json \
+  --out reports/report.sarif
+
+# Post PR comment if PR exists
+if [[ -n "$GITHUB_EVENT_PATH" ]]; then
+    PR_NUMBER=$(jq -r ".pull_request.number // empty" "$GITHUB_EVENT_PATH")
+    if [[ -n "$PR_NUMBER" ]]; then
+        echo "💬 Posting PR comment..."
+        python /app/scripts/pr_commenter.py \
+            --summary reports/summary.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr "$PR_NUMBER" \
+            --token "$GITHUB_TOKEN"
+    fi
+fi
+
+echo "✅ Completed AI Vulnerability Scan"
