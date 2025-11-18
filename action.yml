@@ -1,18 +1,25 @@
 name: "AI-Vulnerability-Scanner"
-description: "Scan code, post insights to PR, and produce a human-friendly report."
-author: "YourName"
+description: "Scan code, generate AI summary, produce SARIF, and post PR comments."
+author: "Sri"
+
 branding:
   icon: shield
   color: purple
 
 inputs:
   github_token:
-    description: "GITHUB_TOKEN or PAT with repo scope"
+    description: "GitHub token for posting PR comments"
     required: true
+  scan_path:
+    description: "Path to scan"
+    required: false
+    default: "."
 
 runs:
   using: "docker"
   image: "Dockerfile"
+  args:
+    - ${{ inputs.scan_path }}
 
 permissions:
   contents: read
