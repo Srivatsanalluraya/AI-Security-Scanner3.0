@@ -6,29 +6,59 @@ echo "🔥 AI Vulnerability Scanner Starting..."
 SCAN_PATH=${1:-"."}
 echo "🔍 Scanning path: $SCAN_PATH"
 
-mkdir -p reports
+# Store reports only inside container
+REPORT_DIR="reports"
+mkdir -p "$REPORT_DIR"
 
 echo "▶ Running Bandit..."
-bandit -r "$SCAN_PATH" -f json -o reports/bandit-report.json || true
+bandit -r "$SCAN_PATH" -f json -o "$REPORT_DIR/bandit-report.json" || true
 
 echo "▶ Running Semgrep..."
-semgrep --config auto --json --output reports/semgrep-report.json "$SCAN_PATH" || true
+semgrep --config auto --json --output "$REPORT_DIR/semgrep-report.json" "$SCAN_PATH" || true
 
 echo "▶ Running pip-audit..."
-pip-audit -f json -o reports/pip-audit-report.json || true
+pip-audit -f json -o "$REPORT_DIR/pip-audit-report.json" || true
 
 echo "📝 Merging reports..."
 python /app/src/reporters/report_builder.py \
-  --reports-dir reports \
-  --out reports/final_report.json
+  --reports-dir "$REPORT_DIR" \
+  --out "$REPORT_DIR/final_report.json"
 
 echo "🤖 Generating AI summary..."
-python /app/src/ai/summarizer.py
+python /app/src/ai/summarizer.py \
+  --input "$REPORT_DIR/final_report.json" \
+  --output "$REPORT_DIR/summary.txt"
 
-echo "📄 Writing SARIF..."
-python /app/src/reporters/sarif_writer.py \
-  --input reports/final_report.json \
-  --out reports/report.sarif
+echo ""
+echo "============================="
+echo "📢 AI SECURITY SUMMARY"
+echo "============================="
+cat "$REPORT_DIR/summary.txt"
+echo ""
+
+echo "============================="
+echo "📢 MERGED SECURITY REPORT"
+echo "============================="
+cat "$REPORT_DIR/final_report.json"
+echo ""
+
+echo "============================="
+echo "📢 BANDIT RAW RESULTS"
+echo "============================="
+cat "$REPORT_DIR/bandit-report.json"
+echo ""
+
+echo "============================="
+echo "📢 SEMGREP RAW RESULTS"
+echo "============================="
+cat "$REPORT_DIR/semgrep-report.json"
+echo ""
+
+echo "============================="
+echo "📢 PIP-AUDIT RAW RESULTS"
+echo "============================="
+cat "$REPORT_DIR/pip-audit-report.json"
+echo ""
 
 # Post PR comment if PR exists
 if [[ -n "$GITHUB_EVENT_PATH" ]]; then
@@ -36,11 +66,11 @@ if [[ -n "$GITHUB_EVENT_PATH" ]]; then
     if [[ -n "$PR_NUMBER" ]]; then
         echo "💬 Posting PR comment..."
         python /app/src/reporters/pr_commenter.py \
-            --summary reports/summary.txt \
+            --summary "$REPORT_DIR/summary.txt" \
             --repo "$GITHUB_REPOSITORY" \
             --pr "$PR_NUMBER" \
             --token "$GITHUB_TOKEN"
     fi
 fi
 
-echo "✅ Completed AI Vulnerability Scan"
+echo "🎉 All reports printed above. Scan complete!"
