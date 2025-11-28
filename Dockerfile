@@ -9,7 +9,7 @@ ENV PYTHONPATH="/app"
 
 # Install system-level dependencies needed by Semgrep + Transformers
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl ca-certificates build-essential libyaml-dev \
+    git curl ca-certificates build-essential libyaml-dev jq\
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
