@@ -4,9 +4,17 @@ set -e
 echo "🔥 AI Vulnerability Scanner Starting..."
 
 SCAN_PATH=${1:-"."}
-echo "🔍 Scanning path: $SCAN_PATH"
+RAW_TOKEN="$2"
 
-# Store reports only inside container
+# Prefer explicit token argument → fallback to env
+GITHUB_TOKEN="${RAW_TOKEN:-$GITHUB_TOKEN}"
+
+if [[ -z "$GITHUB_TOKEN" ]]; then
+    echo "❌ ERROR: GitHub token missing. Provide via 'github_token' input."
+    exit 1
+fi
+
+echo "🔍 Scanning path: $SCAN_PATH"
 REPORT_DIR="reports"
 mkdir -p "$REPORT_DIR"
 
@@ -40,29 +48,11 @@ echo "============================="
 echo "📢 MERGED SECURITY REPORT"
 echo "============================="
 cat "$REPORT_DIR/final_report.json"
-echo ""
 
-echo "============================="
-echo "📢 BANDIT RAW RESULTS"
-echo "============================="
-cat "$REPORT_DIR/bandit-report.json"
-echo ""
-
-echo "============================="
-echo "📢 SEMGREP RAW RESULTS"
-echo "============================="
-cat "$REPORT_DIR/semgrep-report.json"
-echo ""
-
-echo "============================="
-echo "📢 PIP-AUDIT RAW RESULTS"
-echo "============================="
-cat "$REPORT_DIR/pip-audit-report.json"
-echo ""
-
-# Post PR comment if PR exists
+# === PR Comment Handling ===
 if [[ -n "$GITHUB_EVENT_PATH" ]]; then
     PR_NUMBER=$(jq -r ".pull_request.number // empty" "$GITHUB_EVENT_PATH")
+
     if [[ -n "$PR_NUMBER" ]]; then
         echo "💬 Posting PR comment..."
         python /app/src/reporters/pr_commenter.py \
