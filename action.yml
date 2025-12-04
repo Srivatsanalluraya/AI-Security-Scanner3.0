@@ -15,13 +15,19 @@ inputs:
     required: false
     default: "."
 
-runs:
-  using: "docker"
-  image: "Dockerfile"
-  args:
-    - ${{ inputs.scan_path }}
-
 permissions:
   contents: read
   pull-requests: write
   security-events: write
+
+runs:
+  using: "docker"
+  image: "Dockerfile"
+
+  # Pass inputs into container:
+  env:
+    GITHUB_TOKEN: ${{ inputs.github_token }}
+
+  args:
+    - ${{ inputs.scan_path }}
+    - ${{ inputs.github_token }}
