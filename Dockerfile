@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir \
     semgrep==1.80.0 \
     bandit==1.7.9 \
     pip-audit==2.7.3 \
-    transformers \
+    transformers==4.37.2 \
     torch \
     requests \
     sentencepiece \
