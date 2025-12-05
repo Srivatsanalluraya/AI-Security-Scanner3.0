@@ -16,7 +16,8 @@ RUN pip install --no-cache-dir \
     transformers \
     torch \
     requests \
-    sentencepeice \
+    sentencepeice
+
     
 
 # Copy repo files
