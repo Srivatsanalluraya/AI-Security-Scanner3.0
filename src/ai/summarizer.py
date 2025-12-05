@@ -1,27 +1,31 @@
 #!/usr/bin/env python3
 """
-summarizer.py (FIXED)
+summarizer.py
 
-Uses a stronger Hugging Face summarization model instead of flan-t5-small.
-Adds chunking to prevent empty/garbage summaries.
+Reads final_report.json (merged report),
+summarizes it using a Hugging Face model (Mistral-7B),
+and writes summary.txt.
+
+This version:
+- Uses a structured, anti-hallucination prompt
+- Produces stable, clean, severity-grouped summaries
+- Only prints the summary AFTER model execution
 """
 
 import os
 import json
 from pathlib import Path
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import argparse
 
 
-# Strong, stable summarization model that works well in GitHub Actions
-DEFAULT_MODEL = "sshleifer/distilbart-cnn-12-6"
-
-
+# -----------------------------
+# Load and Validate Report
+# -----------------------------
 def load_report(report_path: Path):
-    """Loads JSON or raw text report"""
     if not report_path.exists():
-        raise FileNotFoundError(f"Report not found: {report_path}")
+        raise FileNotFoundError(f"❌ Report not found: {report_path}")
 
     try:
         return json.loads(report_path.read_text(encoding="utf-8"))
@@ -29,95 +33,109 @@ def load_report(report_path: Path):
         return report_path.read_text(encoding="utf-8")
 
 
-def chunk_text(text, chunk_size=3000):
-    """Splits large reports into smaller chunks for better summarization"""
-    return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+# -----------------------------
+# Build Anti-Hallucination Prompt
+# -----------------------------
+def build_prompt(report_text: str):
+    return f"""
+You are an AI Security Assistant.
+
+Your job is to summarize the following merged vulnerability scan report
+STRICTLY using the data provided.
+
+⚠️ IMPORTANT ANTI-HALLUCINATION RULES:
+- Do NOT invent websites, people, editions, or tools.
+- Use ONLY information found inside the report.
+- Do NOT guess details.
+- Keep the summary clear, concise, and technical.
+
+📌 STRUCTURE YOUR SUMMARY EXACTLY LIKE THIS:
+1. HIGH severity issues (filename, line number, description)
+2. MEDIUM severity issues
+3. LOW severity issues
+4. Dependency vulnerabilities (from pip-audit)
+5. Semgrep findings (summarized)
+6. Recommended fixes (short bullet points)
+7. Final overall risk rating (High / Medium / Low)
+
+Here is the scan report (JSON):
+--------------------------------
+{report_text}
+--------------------------------
+
+Generate the structured summary now:
+    """
 
 
-def generate_chunk_summary(model, tokenizer, chunk):
-    """Summarizes a single chunk"""
-    prompt = (
-        "Summarize the following section of a security scan report. "
-        "Highlight vulnerabilities and recommended fixes:\n\n" + chunk
-    )
+# -----------------------------
+# Generate Summary (Mistral-7B)
+# -----------------------------
+def generate_summary(model_name: str, content: str, max_new_tokens=600):
+    print(f"📦 Loading summarization model: {model_name} ...")
 
-    inputs = tokenizer(
-        prompt,
-        return_tensors="pt",
-        truncation=True,
-        max_length=1024,
-    )
-
-    summary_ids = model.generate(
-        inputs["input_ids"],
-        max_length=250,
-        min_length=60,
-        num_beams=4,
-        early_stopping=True,
-    )
-
-    return tokenizer.decode(summary_ids[0], skip_special_tokens=True)
-
-
-def summarize_text(full_text, model_name):
-    """Main summarization routine"""
-    print(f"📦 Loading model: {model_name} ...")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-
-    chunks = chunk_text(full_text)
-    print(f"🧩 Splitting report into {len(chunks)} chunks...")
-
-    summaries = []
-    for i, chunk in enumerate(chunks, start=1):
-        print(f"🤖 Summarizing chunk {i}/{len(chunks)}...")
-        summaries.append(generate_chunk_summary(model, tokenizer, chunk))
-
-    # Final combined summary
-    final_prompt = (
-        "Combine the following partial summaries into one clean, concise "
-        "security report for developers:\n\n" + "\n\n".join(summaries)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float32,
+        device_map="auto"
     )
 
-    print("📦 Finalizing global summary...")
-    inputs = tokenizer(final_prompt, return_tensors="pt", truncation=True, max_length=1024)
+    prompt = build_prompt(content)
 
-    final_ids = model.generate(
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=4096)
+
+    print("🤖 Running summarizer model...")
+    output = model.generate(
         inputs["input_ids"],
-        max_length=300,
-        min_length=100,
-        num_beams=4,
-        early_stopping=True,
+        max_new_tokens=max_new_tokens,
+        temperature=0.2,
+        top_p=0.95,
+        repetition_penalty=1.1
     )
 
-    return tokenizer.decode(final_ids[0], skip_special_tokens=True)
+    summary = tokenizer.decode(output[0], skip_special_tokens=True)
+
+    # Return ONLY the generated portion after the prompt
+    return summary[len(prompt):].strip()
 
 
+# -----------------------------
+# Main Function
+# -----------------------------
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", default="reports/final_report.json")
     parser.add_argument("--output", default="reports/summary.txt")
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--model", default="mistralai/Mistral-7B-Instruct-v0.3")
     args = parser.parse_args()
 
     input_path = Path(args.input)
     output_path = Path(args.output)
 
-    print(f"📄 Reading report: {input_path}")
+    print(f"📄 Reading merged report: {input_path}")
     report_data = load_report(input_path)
 
-    report_text = json.dumps(report_data, indent=2) if isinstance(report_data, dict) else str(report_data)
+    # Convert report to text
+    if isinstance(report_data, dict):
+        report_text = json.dumps(report_data, indent=2)
+    else:
+        report_text = str(report_data)
 
-    # Limit extreme sizes
-    report_text = report_text[:50000]
+    # Truncate if extremely large
+    if len(report_text) > 40000:
+        print("⚠️ Report too large — truncating safely...")
+        report_text = report_text[:40000]
 
-    summary = summarize_text(report_text, args.model)
+    # Summarize
+    summary = generate_summary(args.model, report_text)
 
-    print(f"📝 Writing summary to: {output_path}")
+    # Save output
+    print(f"📝 Writing final AI summary to: {output_path}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(summary, encoding="utf-8")
 
-    print("✅ Summary generation completed!")
+    print("✅ AI Summary Completed Successfully!")
+    print("➡ Summary will now print in the console at the END of scanning.\n")
 
 
 if __name__ == "__main__":
