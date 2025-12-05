@@ -15,7 +15,9 @@ RUN pip install --no-cache-dir \
     pip-audit==2.7.3 \
     transformers \
     torch \
-    requests
+    requests \
+    sentencepeice \
+    safetensors 
 
 # Copy repo files
 COPY src/ /app/src/
