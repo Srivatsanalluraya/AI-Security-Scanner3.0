@@ -2,140 +2,90 @@
 """
 summarizer.py
 
-Reads final_report.json (merged report),
-summarizes it using a Hugging Face model (Mistral-7B),
-and writes summary.txt.
-
-This version:
-- Uses a structured, anti-hallucination prompt
-- Produces stable, clean, severity-grouped summaries
-- Only prints the summary AFTER model execution
+Reads final_report.json and generates a concise vulnerability summary
+using a Hugging Face Seq2Seq model (FLAN-T5 recommended).
 """
 
 import os
 import json
 from pathlib import Path
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
 import argparse
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 
-# -----------------------------
-# Load and Validate Report
-# -----------------------------
-def load_report(report_path: Path):
-    if not report_path.exists():
-        raise FileNotFoundError(f"❌ Report not found: {report_path}")
+def load_report(path: Path):
+    """Load JSON report or raw text."""
+    if not path.exists():
+        raise FileNotFoundError(f"Report not found: {path}")
 
     try:
-        return json.loads(report_path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text())
     except json.JSONDecodeError:
-        return report_path.read_text(encoding="utf-8")
+        return path.read_text()
 
 
-# -----------------------------
-# Build Anti-Hallucination Prompt
-# -----------------------------
-def build_prompt(report_text: str):
-    return f"""
-You are an AI Security Assistant.
-
-Your job is to summarize the following merged vulnerability scan report
-STRICTLY using the data provided.
-
-⚠️ IMPORTANT ANTI-HALLUCINATION RULES:
-- Do NOT invent websites, people, editions, or tools.
-- Use ONLY information found inside the report.
-- Do NOT guess details.
-- Keep the summary clear, concise, and technical.
-
-📌 STRUCTURE YOUR SUMMARY EXACTLY LIKE THIS:
-1. HIGH severity issues (filename, line number, description)
-2. MEDIUM severity issues
-3. LOW severity issues
-4. Dependency vulnerabilities (from pip-audit)
-5. Semgrep findings (summarized)
-6. Recommended fixes (short bullet points)
-7. Final overall risk rating (High / Medium / Low)
-
-Here is the scan report (JSON):
---------------------------------
-{report_text}
---------------------------------
-
-Generate the structured summary now:
-    """
+def prepare_prompt(report_text: str) -> str:
+    return (
+        "You are an AI that summarizes security scan results.\n"
+        "Produce a clean, structured, concise summary with:\n"
+        "- High severity issues\n"
+        "- Medium severity issues\n"
+        "- Low severity issues\n"
+        "- Recommended fixes\n"
+        "- Anything suspicious\n\n"
+        "Here is the scan report:\n\n"
+        f"{report_text}"
+    )
 
 
-# -----------------------------
-# Generate Summary (Mistral-7B)
-# -----------------------------
-def generate_summary(model_name: str, content: str, max_new_tokens=600):
-    print(f"📦 Loading summarization model: {model_name} ...")
+def generate_summary(model_name: str, content: str):
+    print(f"📦 Loading model: {model_name}")
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch.float32,
-        device_map="auto"
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+
+    prompt = prepare_prompt(content)
+
+    inputs = tokenizer(
+        prompt,
+        return_tensors="pt",
+        truncation=True,
+        max_length=1024
     )
 
-    prompt = build_prompt(content)
-
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=4096)
-
-    print("🤖 Running summarizer model...")
-    output = model.generate(
+    print("🤖 Generating summary...")
+    output_ids = model.generate(
         inputs["input_ids"],
-        max_new_tokens=max_new_tokens,
-        temperature=0.2,
-        top_p=0.95,
-        repetition_penalty=1.1
+        max_length=350,
+        min_length=100,
+        num_beams=4,
+        early_stopping=True
     )
 
-    summary = tokenizer.decode(output[0], skip_special_tokens=True)
-
-    # Return ONLY the generated portion after the prompt
-    return summary[len(prompt):].strip()
+    return tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
 
-# -----------------------------
-# Main Function
-# -----------------------------
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", default="reports/final_report.json")
     parser.add_argument("--output", default="reports/summary.txt")
-    parser.add_argument("--model", default="mistralai/Mistral-7B-Instruct-v0.3")
+    parser.add_argument("--model", default="google/flan-t5-small")
     args = parser.parse_args()
 
-    input_path = Path(args.input)
-    output_path = Path(args.output)
+    # Load merged report
+    report_data = load_report(Path(args.input))
+    report_text = json.dumps(report_data, indent=2) if isinstance(report_data, dict) else str(report_data)
 
-    print(f"📄 Reading merged report: {input_path}")
-    report_data = load_report(input_path)
+    # Truncate large report
+    if len(report_text) > 20000:
+        report_text = report_text[:20000]
 
-    # Convert report to text
-    if isinstance(report_data, dict):
-        report_text = json.dumps(report_data, indent=2)
-    else:
-        report_text = str(report_data)
-
-    # Truncate if extremely large
-    if len(report_text) > 40000:
-        print("⚠️ Report too large — truncating safely...")
-        report_text = report_text[:40000]
-
-    # Summarize
+    # Generate summary
     summary = generate_summary(args.model, report_text)
 
     # Save output
-    print(f"📝 Writing final AI summary to: {output_path}")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(summary, encoding="utf-8")
-
-    print("✅ AI Summary Completed Successfully!")
-    print("➡ Summary will now print in the console at the END of scanning.\n")
+    Path(args.output).write_text(summary, encoding="utf-8")
+    print("✅ Summary written to", args.output)
 
 
 if __name__ == "__main__":
