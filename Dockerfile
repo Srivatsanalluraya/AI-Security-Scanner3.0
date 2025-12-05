@@ -19,7 +19,8 @@ RUN pip install --no-cache-dir \
     torch \
     requests \
     sentencepiece \
-    safetensors
+    safetensors \
+    accelerate
 
 # Copy source files
 COPY src/ /app/src/
