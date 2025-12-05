@@ -2,8 +2,8 @@
 """
 summarizer.py
 
-Reads final_report.json and generates a concise vulnerability summary
-using a Hugging Face Seq2Seq model (FLAN-T5 recommended).
+Produces a structured, accurate summary from final_report.json
+using FLAN-T5, WITHOUT hallucinations or generic filler text.
 """
 
 import os
@@ -24,27 +24,64 @@ def load_report(path: Path):
         return path.read_text()
 
 
-def prepare_prompt(report_text: str) -> str:
-    return (
-        "You are an AI that summarizes security scan results.\n"
-        "Produce a clean, structured, concise summary with:\n"
-        "- High severity issues\n"
-        "- Medium severity issues\n"
-        "- Low severity issues\n"
-        "- Recommended fixes\n"
-        "- Anything suspicious\n\n"
-        "Here is the scan report:\n\n"
-        f"{report_text}"
-    )
+def build_strict_prompt(report_text: str) -> str:
+    """
+    Creates a strict, structured summarization instruction.
+    FLAN-T5 will follow this EXACT format.
+    """
+
+    return f"""
+You are an AI security assistant. Summarize ONLY using the information inside the report below.
+Do NOT invent text, URLs, tools, references, or vulnerabilities.
+
+Your summary MUST follow this EXACT format:
+
+======================
+🔐 SECURITY SUMMARY
+======================
+
+### HIGH Severity Issues
+- File: <file> | Line: <line>  
+  Issue: <issue text>  
+  Risk: <risk explanation>  
+  Fix: <short recommended fix>
+
+### MEDIUM Severity Issues
+- File: <file> | Line: <line>  
+  Issue: <issue text>  
+  Risk: <risk explanation>  
+  Fix: <short recommended fix>
+
+### LOW Severity Issues
+- File: <file> | Line: <line>  
+  Issue: <issue text>  
+  Risk: <risk explanation>  
+  Fix: <short recommended fix>
+
+### ❗ Dependency Vulnerabilities (pip-audit)
+- Package: <name> <version>  
+  Vulnerability: <ID>  
+  Fix: <upgrade version>
+
+### Final Notes
+- Summarize pattern trends (only what is present in the report).
+- No hallucinations. No assumptions.
+
+======================
+SCAN REPORT BEGINS BELOW
+======================
+
+{report_text}
+"""
 
 
-def generate_summary(model_name: str, content: str):
+def generate_summary(model_name: str, report_text: str):
     print(f"📦 Loading model: {model_name}")
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 
-    prompt = prepare_prompt(content)
+    prompt = build_strict_prompt(report_text)
 
     inputs = tokenizer(
         prompt,
@@ -53,12 +90,12 @@ def generate_summary(model_name: str, content: str):
         max_length=1024
     )
 
-    print("🤖 Generating summary...")
+    print("🤖 Generating strict structured summary...")
     output_ids = model.generate(
         inputs["input_ids"],
-        max_length=350,
-        min_length=100,
-        num_beams=4,
+        max_length=512,
+        min_length=150,
+        num_beams=5,
         early_stopping=True
     )
 
@@ -72,18 +109,17 @@ def main():
     parser.add_argument("--model", default="google/flan-t5-small")
     args = parser.parse_args()
 
-    # Load merged report
     report_data = load_report(Path(args.input))
+
+    # Convert to readable text
     report_text = json.dumps(report_data, indent=2) if isinstance(report_data, dict) else str(report_data)
 
-    # Truncate large report
+    # Trim very large reports
     if len(report_text) > 20000:
         report_text = report_text[:20000]
 
-    # Generate summary
     summary = generate_summary(args.model, report_text)
 
-    # Save output
     Path(args.output).write_text(summary, encoding="utf-8")
     print("✅ Summary written to", args.output)
 
