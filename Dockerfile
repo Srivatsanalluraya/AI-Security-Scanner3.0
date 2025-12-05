@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir \
     torch \
     requests \
     sentencepeice \
-    safetensors 
+    
 
 # Copy repo files
 COPY src/ /app/src/
