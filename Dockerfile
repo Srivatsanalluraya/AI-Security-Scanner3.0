@@ -3,7 +3,7 @@ FROM python:3.12-slim
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH="/app"
-
+ARG CACHE_BUST=1
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl ca-certificates build-essential libyaml-dev jq \
@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir \
     accelerate
 
 # Copy source files
+ARG CACHE_BUST
 COPY src/ /app/src/
 COPY rules/ /app/rules/
 COPY entrypoint.sh /app/entrypoint.sh
