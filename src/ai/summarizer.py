@@ -9,6 +9,7 @@ from pathlib import Path
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import torch
 
+print("🔥 Running NEW summarizer.py!")
 
 MODEL_NAME = "facebook/bart-large-cnn"   # Much better summarizer
 
