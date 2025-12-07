@@ -10,6 +10,7 @@ inputs:
   github_token:
     description: "GitHub token for posting PR comments"
     required: true
+
   scan_path:
     description: "Path to scan"
     required: false
@@ -22,14 +23,11 @@ permissions:
 
 runs:
   using: "docker"
-  image: "Dockerfile"
-  args:
-    CACHE_BUST: ${{ github.run_id }}
 
-  # Pass inputs into container:
-  env:
-    GITHUB_TOKEN: ${{ inputs.github_token }}
+  # Bust Docker cache on every run — this is the correct syntax
+  image: "Dockerfile#${{ github.run_id }}"
 
+  # Pass inputs to the container as arguments (positional)
   args:
     - ${{ inputs.scan_path }}
     - ${{ inputs.github_token }}
