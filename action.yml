@@ -23,9 +23,8 @@ permissions:
 runs:
   using: "docker"
   image: "Dockerfile"
-  build:
-    args:
-      CACHE_BUST: ${{ github.run_id }}
+  args:
+    CACHE_BUST: ${{ github.run_id }}
 
   # Pass inputs into container:
   env:
