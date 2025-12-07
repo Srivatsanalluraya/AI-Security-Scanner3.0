@@ -23,11 +23,8 @@ permissions:
 
 runs:
   using: "docker"
+  image: "Dockerfile"
 
-  # Bust Docker cache on every run — this is the correct syntax
-  image: "Dockerfile#${{ github.run_id }}"
-
-  # Pass inputs to the container as arguments (positional)
   args:
     - ${{ inputs.scan_path }}
     - ${{ inputs.github_token }}
