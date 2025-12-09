@@ -1,5 +1,5 @@
-name: "AI-Vulnerability-Scanner"
-description: "Scan code, generate AI summary, produce SARIF, and post PR comments."
+name: "AI-Security-Scanner"
+description: "Multi-language security scanner with AI-powered analysis for Python, JavaScript, Java, and Go projects. Includes policy enforcement, dashboard reports, and PR integration."
 author: "Sri"
 
 branding:
@@ -8,16 +8,16 @@ branding:
 
 inputs:
   github_token:
-    description: "GitHub token for posting PR comments"
+    description: "GitHub token for posting PR comments (requires pull-requests: write permission)"
     required: true
 
   scan_path:
-    description: "Path to scan"
+    description: "Path to scan within the repository (supports multi-language projects)"
     required: false
     default: "."
 
   enforce_policy:
-    description: "Enforce security policy (block push if HIGH severity >= 25%)"
+    description: "Enforce security policy: block push if HIGH severity issues >= 25% threshold"
     required: false
     default: "false"
 

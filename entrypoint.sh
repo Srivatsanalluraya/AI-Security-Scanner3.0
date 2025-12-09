@@ -20,17 +20,82 @@ echo "🔐 Policy enforcement: $ENFORCE_POLICY"
 REPORT_DIR="reports"
 mkdir -p "$REPORT_DIR"
 
-# Run scanners silently (capture output only if needed)
+# Detect languages in workspace
+echo ""
+echo "🔎 Detecting languages..."
+python /app/src/language_detector.py "$SCAN_PATH" > "$REPORT_DIR/languages.txt" || echo "Language detection skipped"
+cat "$REPORT_DIR/languages.txt" 2>/dev/null || true
+
+echo ""
 echo "▶ Running security scanners..."
 
-echo "  - Bandit..."
-bandit -r "$SCAN_PATH" -f json -o "$REPORT_DIR/bandit-report.json" 2>/dev/null || true
+# === PYTHON SCANNERS ===
+if [ -f "requirements.txt" ] || find . -name "*.py" -type f | head -n 1 | grep -q .; then
+    echo "  🐍 Python detected"
+    
+    echo "    - Bandit (Python security)"
+    bandit -r "$SCAN_PATH" -f json -o "$REPORT_DIR/bandit-report.json" 2>/dev/null || true
+    
+    if [ -f "requirements.txt" ]; then
+        echo "    - pip-audit (Python dependencies)"
+        pip-audit -f json -o "$REPORT_DIR/pip-audit-report.json" 2>/dev/null || true
+    fi
+fi
 
-echo "  - Semgrep..."
+# === JAVASCRIPT/NODE.JS SCANNERS ===
+if [ -f "package.json" ] || find . -name "*.js" -o -name "*.ts" -o -name "*.jsx" -o -name "*.tsx" | head -n 1 | grep -q .; then
+    echo "  📦 JavaScript/Node.js detected"
+    
+    if [ -f "package.json" ]; then
+        echo "    - npm audit (Node.js dependencies)"
+        npm audit --json > "$REPORT_DIR/npm-audit-report.json" 2>/dev/null || true
+        
+        echo "    - npm outdated"
+        npm outdated --json > "$REPORT_DIR/npm-outdated.json" 2>/dev/null || true
+    fi
+    
+    if [ -f "yarn.lock" ]; then
+        echo "    - yarn audit (Yarn dependencies)"
+        yarn audit --json > "$REPORT_DIR/yarn-audit-report.json" 2>/dev/null || true
+    fi
+fi
+
+# === JAVA SCANNERS ===
+if [ -f "pom.xml" ] || [ -f "build.gradle" ] || find . -name "*.java" -type f | head -n 1 | grep -q .; then
+    echo "  ☕ Java detected"
+    
+    if command -v dependency-check.sh &> /dev/null; then
+        echo "    - OWASP Dependency Check (Java dependencies)"
+        dependency-check.sh --scan . --format JSON --out "$REPORT_DIR" --project "scan" 2>/dev/null || true
+        mv "$REPORT_DIR/dependency-check-report.json" "$REPORT_DIR/java-dependency-check.json" 2>/dev/null || true
+    fi
+fi
+
+# === GO SCANNERS ===
+if [ -f "go.mod" ] || find . -name "*.go" -type f | head -n 1 | grep -q .; then
+    echo "  🔷 Go detected"
+    
+    if command -v gosec &> /dev/null; then
+        echo "    - Gosec (Go security)"
+        gosec -fmt json -out "$REPORT_DIR/gosec-report.json" ./... 2>/dev/null || true
+    fi
+    
+    if [ -f "go.sum" ] && command -v nancy &> /dev/null; then
+        echo "    - Nancy (Go dependencies)"
+        go list -json -m all | nancy sleuth --output json > "$REPORT_DIR/nancy-report.json" 2>/dev/null || true
+    fi
+fi
+
+# === UNIVERSAL SCANNERS (ALL LANGUAGES) ===
+echo "  🔍 Universal scanners"
+
+echo "    - Semgrep (multi-language)"
 semgrep --config auto --json --output "$REPORT_DIR/semgrep-report.json" "$SCAN_PATH" 2>/dev/null || true
 
-echo "  - pip-audit..."
-pip-audit -f json -o "$REPORT_DIR/pip-audit-report.json" 2>/dev/null || true
+if command -v trivy &> /dev/null; then
+    echo "    - Trivy (vulnerabilities & misconfigurations)"
+    trivy fs --format json --output "$REPORT_DIR/trivy-report.json" "$SCAN_PATH" 2>/dev/null || true
+fi
 
 echo ""
 echo "▶ Merging reports..."

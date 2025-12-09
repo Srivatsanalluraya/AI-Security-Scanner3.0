@@ -1,0 +1,300 @@
+# AI Security Scanner 3.0
+
+**Multi-Language Security Scanner with AI-Powered Analysis**
+
+A comprehensive security scanning tool for Python, JavaScript/Node.js, Java, and Go projects with AI-powered vulnerability summarization, dashboard reporting, and policy enforcement.
+
+## 🚀 Features
+
+### Multi-Language Support
+- **Python**: Bandit (security), pip-audit (dependencies), Semgrep
+- **JavaScript/Node.js**: npm/yarn audit (dependencies), Semgrep
+- **Java**: OWASP Dependency Check, Semgrep
+- **Go**: Gosec (security), Nancy (dependencies), Semgrep
+- **Universal**: Trivy (vulnerabilities & misconfigurations)
+
+### Intelligent Features
+- **Auto Language Detection**: Automatically detects project languages and runs appropriate scanners
+- **AI-Powered Analysis**: FLAN-T5 model generates impact statements and fix suggestions
+- **Dashboard Reports**: Color-coded console dashboard with severity distribution
+- **Policy Enforcement**: Blocks pushes when HIGH severity issues exceed 25% threshold
+- **PR Integration**: Comprehensive PR comments with:
+  - Dashboard-style severity overview
+  - File-by-file vulnerability breakdown
+  - Detailed issue descriptions with impact and fixes
+  - Policy compliance status
+
+### Security Scanners
+
+| Language | Security Scanner | Dependency Scanner | Coverage |
+|----------|-----------------|-------------------|----------|
+| Python | Bandit | pip-audit | Static code analysis, known vulnerabilities |
+| JavaScript/Node.js | Semgrep | npm audit, yarn audit | Code patterns, npm vulnerabilities |
+| Java | Semgrep | OWASP Dependency Check | Code patterns, dependency vulnerabilities |
+| Go | Gosec | Nancy | Security issues, go.mod vulnerabilities |
+| All | Semgrep, Trivy | - | Multi-language patterns, container scans |
+
+## 📋 Requirements
+
+- Docker
+- GitHub token (for PR comments)
+- Workspace with supported language files
+
+## 🔧 Usage
+
+### GitHub Actions
+
+```yaml
+name: Security Scan
+on: [push, pull_request]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Run AI Security Scanner
+        uses: your-username/ai-security-scanner@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          scan_path: "."
+          enforce_policy: "true"
+```
+
+### Manual Docker Run
+
+```bash
+docker build -t security-scanner .
+
+docker run --rm \
+  -v $(pwd):/workspace \
+  -e GITHUB_TOKEN=your_token \
+  -e INPUT_ENFORCE_POLICY=true \
+  security-scanner . your_token
+```
+
+## 📊 Output Formats
+
+### Console Dashboard
+```
+╔═══════════════════════════════════════╗
+║      🔒 SECURITY SCAN SUMMARY         ║
+╠═══════════════════════════════════════╣
+║  HIGH:    5  ████████░░ (25%)        ║
+║  MEDIUM: 11  ██████████░ (55%)       ║
+║  LOW:     4  ████░░░░░░ (20%)        ║
+╠═══════════════════════════════════════╣
+║  Total Issues: 20                     ║
+║  Status: ⚠️ WARNING (25% HIGH)        ║
+╚═══════════════════════════════════════╝
+```
+
+### PR Comments
+- **Dashboard Section**: Visual severity distribution
+- **Files Section**: Grouped vulnerabilities by affected file
+- **Detailed Issues**: 
+  - **Pushed by**: Scanner tool (Bandit, Gosec, npm-audit, etc.)
+  - **Description**: Vulnerability explanation
+  - **Impact**: AI-generated impact assessment
+  - **Fix**: Actionable remediation steps
+- **Policy Status**: Allow/Block decision with threshold details
+
+### Report Files
+- `issues_detailed.json`: Comprehensive issue list with metadata
+- `final_report.json`: Merged scanner outputs
+- `*-report.json`: Individual scanner reports
+- `languages.txt`: Detected languages in workspace
+
+## 🛡️ Security Policy
+
+**Default Threshold**: 25% HIGH severity
+
+- **Above 25% HIGH**: ❌ **BLOCKED** - Push rejected
+- **Below 25% HIGH**: ⚠️ **WARNING** - Push allowed with notice
+- **No HIGH issues**: ✅ **PASSED** - Clean scan
+
+Customize enforcement:
+```yaml
+with:
+  enforce_policy: "true"  # Blocks on policy violation
+  # OR
+  enforce_policy: "false" # Warning only (default)
+```
+
+## 🧩 Architecture
+
+```
+Language Detection → Conditional Scanners → Report Merging → AI Analysis → Display/PR
+      ↓                    ↓                     ↓              ↓           ↓
+ detector.py          entrypoint.sh       report_builder   summarizer   dashboard
+                      (Python: bandit)                                   pr_commenter
+                      (Node: npm audit)
+                      (Java: dep-check)
+                      (Go: gosec)
+                      (All: semgrep)
+```
+
+## 🔍 Scanner Details
+
+### Python Scanners
+- **Bandit**: Detects SQL injection, hardcoded credentials, weak crypto
+- **pip-audit**: Scans requirements.txt for CVEs
+- **Semgrep**: Custom security rules for Python
+
+### JavaScript/Node.js Scanners
+- **npm audit**: Official npm vulnerability scanner
+- **yarn audit**: Yarn dependency security
+- **Semgrep**: JavaScript/TypeScript security patterns
+
+### Java Scanners
+- **OWASP Dependency Check**: CVE scanning for Java dependencies
+- **Semgrep**: Java security rules
+
+### Go Scanners
+- **Gosec**: Go security checker (hardcoded credentials, weak crypto)
+- **Nancy**: go.mod/go.sum vulnerability scanner
+- **Semgrep**: Go security patterns
+
+### Universal Scanners
+- **Trivy**: Comprehensive vulnerability scanner (OS packages, application dependencies, IaC)
+- **Semgrep**: Multi-language security rules (auto-config)
+
+## 📁 Project Structure
+
+```
+AI-Security-Scanner3.0/
+├── action.yml              # GitHub Action definition
+├── Dockerfile              # Multi-language container
+├── entrypoint.sh           # Main orchestration script
+├── src/
+│   ├── language_detector.py    # Auto-detect languages
+│   ├── security_policy.py      # Policy enforcement logic
+│   ├── output_formatter.py     # Console formatting
+│   ├── ai/
+│   │   ├── summarizer.py       # AI-powered analysis
+│   │   └── prompts/
+│   │       └── summary.md      # FLAN-T5 prompts
+│   └── reporters/
+│       ├── dashboard.py         # Console dashboard
+│       ├── pr_commenter.py      # PR comment generator
+│       ├── report_builder.py    # Report merger
+│       ├── report_display.py    # Download guidance
+│       └── sarif_writer.py      # SARIF export
+└── rules/
+    └── semgrep.yml             # Custom Semgrep rules
+```
+
+## 🔐 Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `GITHUB_TOKEN` | GitHub token for API access | Yes (for PR comments) |
+| `INPUT_ENFORCE_POLICY` | Enable/disable policy blocking | No (default: false) |
+| `GITHUB_REPOSITORY` | Repository name (auto-set by Actions) | Yes (for PR comments) |
+| `GITHUB_EVENT_PATH` | Event payload path (auto-set by Actions) | Yes (for PR comments) |
+
+## 🤖 AI-Powered Features
+
+Uses **FLAN-T5-base** model for:
+
+1. **Impact Generation**: Analyzes vulnerability context to generate business impact
+2. **Fix Suggestions**: Provides actionable remediation steps
+3. **Severity Normalization**: Maps scanner-specific severities to HIGH/MEDIUM/LOW
+
+## 📦 Installation & Dependencies
+
+All dependencies are containerized in the Docker image:
+
+**Base Runtimes**:
+- Python 3.12
+- Node.js 20.x
+- Go 1.21
+- Java OpenJDK 17
+
+**Security Tools**:
+- bandit, pip-audit, semgrep (Python)
+- npm, yarn (JavaScript)
+- gosec, nancy (Go)
+- trivy (Universal)
+- OWASP Dependency Check (Java) [Planned]
+
+**AI/ML**:
+- transformers (HuggingFace)
+- torch (PyTorch)
+
+## 🛠️ Development
+
+### Local Testing
+
+1. Build container:
+```bash
+docker build -t security-scanner .
+```
+
+2. Run on sample project:
+```bash
+docker run --rm -v /path/to/project:/workspace security-scanner
+```
+
+3. Test specific language:
+```bash
+# Python project
+docker run --rm -v /path/to/python-app:/workspace security-scanner
+
+# Node.js project
+docker run --rm -v /path/to/node-app:/workspace security-scanner
+
+# Multi-language project
+docker run --rm -v /path/to/polyglot-app:/workspace security-scanner
+```
+
+### Adding New Scanners
+
+1. Update `Dockerfile` with scanner installation
+2. Add detection logic in `language_detector.py`
+3. Add scanner invocation in `entrypoint.sh`
+4. Update `summarizer.py` to parse new report format
+5. Add report filename to `report_builder.py` KNOWN_JSON_REPORTS
+
+## 📄 License
+
+See [LICENSE](LICENSE) file.
+
+## 🔗 Links
+
+- [Security Policy](SECURITY.md)
+- [Action Definition](action.yml)
+
+## 🆘 Troubleshooting
+
+**Issue**: Scanners not running
+- Check language detection: `cat reports/languages.txt`
+- Verify manifest files exist (requirements.txt, package.json, go.mod, pom.xml)
+
+**Issue**: Policy blocking unexpectedly
+- Review HIGH severity count in dashboard
+- Check threshold: 25% HIGH triggers block
+- Verify `enforce_policy` setting
+
+**Issue**: PR comments not appearing
+- Ensure `GITHUB_TOKEN` has write permissions
+- Verify PR number extraction from `GITHUB_EVENT_PATH`
+- Check runner logs for API errors
+
+**Issue**: Missing dependencies in scan
+- Node.js: Run `npm install` before scanning
+- Python: Ensure requirements.txt is up-to-date
+- Go: Run `go mod tidy` before scanning
+- Java: Verify pom.xml or build.gradle exists
+
+## 📈 Version History
+
+- **v3.0**: Multi-language support (Python, JavaScript, Java, Go)
+- **v2.5**: Policy enforcement and dashboard reports
+- **v2.0**: AI-powered analysis with FLAN-T5
+- **v1.0**: Initial Python-only scanner
+
+---
+
+**Built with ❤️ for secure software development**

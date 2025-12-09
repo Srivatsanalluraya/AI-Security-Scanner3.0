@@ -17,6 +17,11 @@ KNOWN_JSON_REPORTS = [
     "bandit-report.json",
     "semgrep-report.json",
     "pip-audit-report.json",
+    "npm-audit-report.json",
+    "gosec-report.json",
+    "nancy-report.json",
+    "trivy-report.json",
+    "java-dependency-check.json",
     "static_report.json",   # alternate name used earlier
     "merged_scan.json",
 ]
