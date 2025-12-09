@@ -28,21 +28,27 @@ A comprehensive security scanning tool for Python, JavaScript/Node.js, Java, and
 
 | Language | Security Scanner | Dependency Scanner | Coverage |
 |----------|-----------------|-------------------|----------|
-| Python | Bandit | pip-audit | Static code analysis, known vulnerabilities |
-| JavaScript/Node.js | Semgrep | npm audit, yarn audit | Code patterns, npm vulnerabilities |
-| Java | Semgrep | OWASP Dependency Check | Code patterns, dependency vulnerabilities |
-| Go | Gosec | Nancy | Security issues, go.mod vulnerabilities |
-| All | Semgrep, Trivy | - | Multi-language patterns, container scans |
+| Python | Bandit, Semgrep | pip-audit | Static code analysis, known vulnerabilities |
+| JavaScript/Node.js | Semgrep | - | Code patterns, security vulnerabilities |
+| Java | Semgrep | - | Code patterns, security vulnerabilities |
+| Go | Semgrep | - | Code patterns, security vulnerabilities |
+| Ruby, PHP, C, C++, etc. | Semgrep | - | Multi-language security patterns |
+
+**Note:** Semgrep's `--config auto` automatically detects and scans 30+ languages without requiring separate language runtimes.
 
 ## 📋 Requirements
 
-- Docker
-- GitHub token (for PR comments)
-- Workspace with supported language files
+**For GitHub Actions (Recommended):**
+- GitHub token (automatically provided by `${{ secrets.GITHUB_TOKEN }}`)
+- No local installation needed!
+
+**For Local Testing (Optional):**
+- Docker Desktop (only if you want to test locally)
+- GitHub token for PR comment testing
 
 ## 🔧 Usage
 
-### GitHub Actions
+### GitHub Actions (Recommended - No Docker Desktop Required!)
 
 ```yaml
 name: Security Scan
@@ -62,7 +68,11 @@ jobs:
           enforce_policy: "true"
 ```
 
-### Manual Docker Run
+### Local Testing (Optional - Requires Docker Desktop)
+
+**Note:** You don't need Docker Desktop for normal use! The scanner runs automatically in GitHub Actions.
+
+Only use this if you want to test changes locally:
 
 ```bash
 docker build -t security-scanner .
