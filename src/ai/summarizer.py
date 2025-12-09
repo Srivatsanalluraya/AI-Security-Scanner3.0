@@ -1,115 +1,142 @@
 #!/usr/bin/env python3
 """
-Better Security Summarizer
-Outputs REAL issues + real fixes, not generic statements.
+Structured AI summarizer for Bandit, Semgrep, pip-audit results.
+- Extracts each issue
+- Summarizes issue, consequence, fix separately
+- Produces consistent PR-ready output
 """
 
-import os
 import json
 from pathlib import Path
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-import argparse
 
 
-def load_report(path: Path):
-    """Load JSON report or fallback to raw text."""
-    if not path.exists():
-        raise FileNotFoundError(f"Missing report: {path}")
+MODEL_NAME = "google/flan-t5-small"
+
+
+def load_json(path):
+    if not Path(path).exists():
+        return None
     try:
-        return json.loads(path.read_text())
-    except json.JSONDecodeError:
-        return path.read_text()
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except:
+        return None
 
 
-def build_strict_prompt(report_text: str) -> str:
-    """
-    Creates a STRICT template forcing the model to produce:
-    - Issue description
-    - Severity
-    - Why it is dangerous
-    - EXACT recommended fix
-    """
-
-    return f"""
-You are a senior application security engineer.
-Analyze the following Bandit + Semgrep + pip-audit report and produce a *developer-ready* summary.
-
-STRICT OUTPUT FORMAT (do NOT deviate):
-
-### 🔥 Critical / High Issues
-For each issue:
-- **Issue:** <short description of vulnerability>
-- **File:** <filename + line number>
-- **Severity:** <LOW/MEDIUM/HIGH/CRITICAL>
-- **Why it matters:** <1–2 sentences explaining the risk>
-- **Recommended Fix:** <EXACT fix or safe alternative>
-
-### 🟡 Medium Issues
-(Same format)
-
-### 🟢 Low Issues
-(Same format)
-
-### 📦 Dependency Vulnerabilities (pip-audit)
-- <package> <version>: <vulnerability + fix>
-
-DO NOT add disclaimers.
-DO NOT say “this is AI-generated.”
-DO NOT invent references.
-Only summarize what is IN the report.
-
---- BEGIN REPORT ---
-{report_text}
---- END REPORT ---
-"""
-
-
-def generate_summary(model_name: str, report_text: str, max_len=400):
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-
-    prompt = build_strict_prompt(report_text)
+def short_ai_summary(text, tokenizer, model, max_len=120):
+    """Use FLAN-T5 to summarize *small chunks only*."""
+    prompt = (
+        "Summarize the following security issue in 2–3 sentences. "
+        "Explain the risk and a safe fix.\n\n" + text
+    )
 
     inputs = tokenizer(
         prompt,
         return_tensors="pt",
         truncation=True,
-        max_length=1024
+        max_length=512
     )
 
-    summary_ids = model.generate(
+    outputs = model.generate(
         inputs["input_ids"],
         max_length=max_len,
-        min_length=120,
         num_beams=4,
         early_stopping=True
     )
 
-    return tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+    return tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+
+def extract_all_issues(report_dir):
+    issues = []
+
+    # -----------------------
+    # BANDIT extraction
+    # -----------------------
+    bandit = load_json(f"{report_dir}/bandit-report.json")
+    if bandit and "results" in bandit:
+        for r in bandit["results"]:
+            issues.append({
+                "source": "Bandit",
+                "file": r.get("filename"),
+                "line": r.get("line_number"),
+                "issue": r.get("issue_text"),
+                "severity": r.get("issue_severity", "UNKNOWN"),
+                "confidence": r.get("issue_confidence", "UNKNOWN")
+            })
+
+    # -----------------------
+    # SEMGREP extraction
+    # -----------------------
+    semgrep = load_json(f"{report_dir}/semgrep-report.json")
+    if semgrep and "results" in semgrep:
+        for r in semgrep["results"]:
+            issues.append({
+                "source": "Semgrep",
+                "file": r.get("path"),
+                "line": r.get("start", {}).get("line"),
+                "issue": r["extra"]["message"],
+                "severity": r["extra"].get("severity", "UNKNOWN"),
+            })
+
+    # -----------------------
+    # PIP-AUDIT extraction
+    # -----------------------
+    pip_audit = load_json(f"{report_dir}/pip-audit-report.json")
+    if pip_audit and "dependencies" in pip_audit:
+        for dep in pip_audit["dependencies"]:
+            for vuln in dep.get("vulns", []):
+                issues.append({
+                    "source": "pip-audit",
+                    "package": dep["name"],
+                    "version": dep["version"],
+                    "issue": vuln.get("id") or vuln.get("aliases"),
+                    "fix": vuln.get("fix_versions")
+                })
+
+    return issues
+
+
+def generate_final_summary(issues, pushed_by):
+    """Format issues into the exact PR comment format you want."""
+
+    lines = []
+    lines.append(f"Pushed by: {pushed_by}")
+    lines.append(f"Issues Found: {len(issues)}")
+    lines.append("")
+
+    for idx, issue in enumerate(issues, start=1):
+        lines.append(f"Issue {idx}:")
+        lines.append(f"  • Source: {issue.get('source')}")
+        lines.append(f"  • File: {issue.get('file')}")
+        lines.append(f"  • Line: {issue.get('line')}")
+        lines.append(f"  • Description: {issue['ai_summary']}")
+        lines.append("")
+
+    return "\n".join(lines)
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input", default="reports/final_report.json")
-    parser.add_argument("--output", default="reports/summary.txt")
-    parser.add_argument("--model", default="google/flan-t5-large")
-    args = parser.parse_args()
+    report_dir = "reports"
 
-    report_data = load_report(Path(args.input))
+    issues = extract_all_issues(report_dir)
+    if not issues:
+        Path(f"{report_dir}/summary.txt").write_text("No issues detected.")
+        return
 
-    if isinstance(report_data, dict):
-        report_text = json.dumps(report_data, indent=2)
-    else:
-        report_text = str(report_data)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
 
-    if len(report_text) > 20000:
-        report_text = report_text[:20000]
+    # run short summarization for each issue
+    for issue in issues:
+        raw_text = f"{issue}"
+        issue["ai_summary"] = short_ai_summary(raw_text, tokenizer, model)
 
-    summary = generate_summary(args.model, report_text)
+    pushed_by = ""  # pr_commenter will fill this later
+    final_text = generate_final_summary(issues, pushed_by)
 
-    Path(args.output).write_text(summary)
-    print("\n===== AI SUMMARY =====\n")
-    print(summary)
+    Path(f"{report_dir}/summary.txt").write_text(final_text, encoding="utf-8")
+    print("Summary written to reports/summary.txt")
 
 
 if __name__ == "__main__":
