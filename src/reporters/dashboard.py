@@ -158,16 +158,30 @@ class DashboardReport:
         print(f"{self.YELLOW}└──────────────────────────────────────────────────────────┘{self.RESET}\n")
     
     def print_status_bar(self, total_issues: int):
-        """Print status bar at bottom."""
+        """Print status bar at bottom with policy enforcement."""
+        # Calculate severity proportions
+        severity_counts = {}
+        for issue in self.load_detailed_report().get("detailed_issues", []):
+            sev = issue.get("severity", "UNKNOWN")
+            severity_counts[sev] = severity_counts.get(sev, 0) + 1
+        
+        high_pct = 0
+        if total_issues > 0:
+            high_pct = round((severity_counts.get("HIGH", 0) / total_issues) * 100, 1)
+        
+        # Determine status based on policy
         if total_issues == 0:
             status = f"{self.BRIGHT_GREEN}{self.BOLD}✓ PASS{self.RESET}"
             message = "No security issues detected"
+        elif high_pct >= 25:
+            status = f"{self.BRIGHT_RED}{self.BOLD}✗ BLOCKED{self.RESET}"
+            message = f"CRITICAL: {high_pct}% HIGH severity (≥25% threshold) - Push blocked"
         elif total_issues <= 2:
             status = f"{self.BRIGHT_YELLOW}{self.BOLD}⚠ WARNING{self.RESET}"
-            message = "Minor security issues found - review and fix"
+            message = f"Minor security issues found ({high_pct}% HIGH) - Review recommended"
         else:
-            status = f"{self.BRIGHT_RED}{self.BOLD}✗ FAIL{self.RESET}"
-            message = "Critical security issues detected - immediate action required"
+            status = f"{self.BRIGHT_YELLOW}{self.BOLD}⚠ WARNING{self.RESET}"
+            message = f"Security issues detected ({high_pct}% HIGH) - Review before merging"
         
         print(f"{self.BRIGHT_CYAN}{self.box_line()}{self.RESET}")
         print(f"{self.BRIGHT_CYAN}║{self.RESET} Status: {status}  |  {message}")
