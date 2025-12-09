@@ -39,13 +39,12 @@ python /app/src/reporters/report_builder.py \
 echo "▶ Generating AI summaries..."
 python /app/src/ai/summarizer.py 2>/dev/null || echo "  ⚠️ Summarization encountered an issue"
 
-# Display concise summary report
+# Display dashboard-style report
 echo ""
-python /app/src/reporters/report_display.py \
-  --report-dir "$REPORT_DIR" \
-  --summary-only 2>/dev/null || echo "Could not display summary"
+python /app/src/reporters/dashboard.py \
+  --report-dir "$REPORT_DIR" 2>/dev/null || echo "Could not display dashboard"
 
-# Display detailed findings
+# Display detailed findings and download info
 python /app/src/reporters/report_display.py \
   --report-dir "$REPORT_DIR" \
   --downloads-only 2>/dev/null || echo "Could not display download options"
