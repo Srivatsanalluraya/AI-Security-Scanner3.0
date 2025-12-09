@@ -90,7 +90,7 @@ def extract_all_issues(report_dir) -> List[Dict]:
     issues = []
 
     # -----------------------
-    # BANDIT extraction (Python)
+    # BANDIT extraction
     # -----------------------
     bandit = load_json(f"{report_dir}/bandit-report.json")
     if bandit and "results" in bandit:
@@ -105,7 +105,7 @@ def extract_all_issues(report_dir) -> List[Dict]:
             })
 
     # -----------------------
-    # SEMGREP extraction (Multi-language)
+    # SEMGREP extraction
     # -----------------------
     semgrep = load_json(f"{report_dir}/semgrep-report.json")
     if semgrep and "results" in semgrep:
@@ -119,10 +119,11 @@ def extract_all_issues(report_dir) -> List[Dict]:
             })
 
     # -----------------------
-    # PIP-AUDIT extraction (Python dependencies)
+    # PIP-AUDIT extraction
     # -----------------------
     pip_audit = load_json(f"{report_dir}/pip-audit-report.json")
     if pip_audit:
+        # Handle both dictionary and list formats
         deps = pip_audit if isinstance(pip_audit, list) else pip_audit.get("dependencies", [])
         for dep in deps:
             for vuln in dep.get("vulns", []):
@@ -135,88 +136,6 @@ def extract_all_issues(report_dir) -> List[Dict]:
                     "issue": f"{vuln.get('id', 'CVE')} - {vuln.get('description', 'Dependency vulnerability')}",
                     "severity": "MEDIUM",
                     "fix": f"Update {dep.get('name')} to {vuln.get('fix_versions', 'latest version')}"
-                })
-
-    # -----------------------
-    # NPM AUDIT extraction (Node.js dependencies)
-    # -----------------------
-    npm_audit = load_json(f"{report_dir}/npm-audit-report.json")
-    if npm_audit and "vulnerabilities" in npm_audit:
-        for pkg_name, vuln_data in npm_audit.get("vulnerabilities", {}).items():
-            if isinstance(vuln_data, dict):
-                issues.append({
-                    "source": "npm-audit",
-                    "package": pkg_name,
-                    "file": "package.json",
-                    "line": 0,
-                    "issue": vuln_data.get("title", "Dependency vulnerability"),
-                    "severity": extract_severity_level(vuln_data.get("severity", "MEDIUM")),
-                    "fix": f"Update to version {vuln_data.get('fixAvailable', {}).get('version', 'latest')}"
-                })
-
-    # -----------------------
-    # GOSEC extraction (Go security)
-    # -----------------------
-    gosec = load_json(f"{report_dir}/gosec-report.json")
-    if gosec and "Issues" in gosec:
-        for r in gosec["Issues"]:
-            issues.append({
-                "source": "Gosec",
-                "file": r.get("file"),
-                "line": r.get("line"),
-                "issue": r.get("details"),
-                "severity": extract_severity_level(r.get("severity", "MEDIUM")),
-            })
-
-    # -----------------------
-    # NANCY extraction (Go dependencies)
-    # -----------------------
-    nancy = load_json(f"{report_dir}/nancy-report.json")
-    if nancy and isinstance(nancy, list):
-        for vuln in nancy:
-            if isinstance(vuln, dict):
-                issues.append({
-                    "source": "Nancy",
-                    "package": vuln.get("Coordinates", "unknown"),
-                    "file": "go.sum",
-                    "line": 0,
-                    "issue": vuln.get("Title", "Go dependency vulnerability"),
-                    "severity": "HIGH",
-                    "fix": "Update Go dependencies"
-                })
-
-    # -----------------------
-    # TRIVY extraction (Universal)
-    # -----------------------
-    trivy = load_json(f"{report_dir}/trivy-report.json")
-    if trivy and "Results" in trivy:
-        for result in trivy["Results"]:
-            for vuln in result.get("Vulnerabilities", []):
-                issues.append({
-                    "source": "Trivy",
-                    "package": vuln.get("PkgName", "unknown"),
-                    "file": result.get("Target", "dependencies"),
-                    "line": 0,
-                    "issue": vuln.get("Title", vuln.get("VulnerabilityID", "Vulnerability")),
-                    "severity": extract_severity_level(vuln.get("Severity", "MEDIUM")),
-                    "fix": f"Update to {vuln.get('FixedVersion', 'latest version')}"
-                })
-
-    # -----------------------
-    # JAVA DEPENDENCY CHECK extraction
-    # -----------------------
-    java_dep = load_json(f"{report_dir}/java-dependency-check.json")
-    if java_dep and "dependencies" in java_dep:
-        for dep in java_dep["dependencies"]:
-            for vuln in dep.get("vulnerabilities", []):
-                issues.append({
-                    "source": "OWASP-DepCheck",
-                    "package": dep.get("fileName", "unknown"),
-                    "file": "pom.xml",
-                    "line": 0,
-                    "issue": vuln.get("name", "Java dependency vulnerability"),
-                    "severity": extract_severity_level(vuln.get("severity", "MEDIUM")),
-                    "fix": "Update Java dependencies"
                 })
 
     return issues
