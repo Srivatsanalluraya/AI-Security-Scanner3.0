@@ -85,8 +85,9 @@ if [[ -n "$GITHUB_EVENT_PATH" ]]; then
             POLICY_FLAG="--enforce-policy"
         fi
         
+        # Use issues_detailed.json for consistent counts with dashboard
         python /app/src/reporters/pr_commenter.py \
-            --report "$REPORT_DIR/final_report.json" \
+            --report "$REPORT_DIR/issues_detailed.json" \
             --repo "$GITHUB_REPOSITORY" \
             --pr "$PR_NUMBER" \
             --token "$GITHUB_TOKEN" \

@@ -18,15 +18,31 @@ from collections import defaultdict
 
 
 def load_issues_from_report(report_path: Path) -> list:
-    """Load issues from the final merged report."""
+    """Load issues from the detailed issues report (same as dashboard)."""
     if not report_path.exists():
         return []
     
     try:
         data = json.loads(report_path.read_text(encoding="utf-8"))
-        issues = []
         
-        # Extract issues from merged report
+        # Check if this is issues_detailed.json format
+        if "detailed_issues" in data:
+            # Load from issues_detailed.json (preferred)
+            issues = []
+            for issue in data.get("detailed_issues", []):
+                issues.append({
+                    "source": issue.get("source", "Unknown"),
+                    "issue": issue.get("description", ""),
+                    "severity": issue.get("severity", "MEDIUM").upper(),
+                    "path": issue.get("file", "unknown"),
+                    "line": issue.get("line", 0),
+                    "impact": issue.get("impact", ""),
+                    "fix": issue.get("fix", "")
+                })
+            return issues
+        
+        # Fallback: Load from final_report.json format
+        issues = []
         for report_name, report_data in data.get("reports", {}).items():
             if isinstance(report_data, dict):
                 results = report_data.get("results", report_data.get("issues", []))
