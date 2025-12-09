@@ -212,9 +212,9 @@ This automated security scan found **no security issues**.
     # Get policy status
     status, policy_msg, _ = check_policy_compliance(issues)
     
-    # Build structured issue list
+    # Build structured issue list - Show ALL issues
     issue_lines = []
-    for idx, issue in enumerate(issues[:10], start=1):  # Show top 10
+    for idx, issue in enumerate(issues, start=1):  # Show all issues
         severity = issue.get("severity", "UNKNOWN")
         description = issue.get("issue", "No description")[:120]
         path = issue.get("path", "unknown")
@@ -223,9 +223,6 @@ This automated security scan found **no security issues**.
         
         issue_line = f"**#{idx}** | {severity} | `{path}:{line}` | [{source}] {description}"
         issue_lines.append(issue_line)
-    
-    if len(issues) > 10:
-        issue_lines.append(f"\n*...and {len(issues) - 10} more issues*")
     
     issues_section = "\n".join(issue_lines)
     
