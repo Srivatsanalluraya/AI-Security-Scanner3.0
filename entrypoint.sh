@@ -70,37 +70,44 @@ python /app/src/reporters/report_display.py \
   --report-dir "$REPORT_DIR" \
   --downloads-only 2>/dev/null || echo "Could not display download options"
 
-# === SAVE ARTIFACTS TO TARGET REPO ===
+# === SAVE ARTIFACTS TO TARGET REPOSITORY ===
 echo ""
-echo "▶ Saving artifacts to target repository..."
+echo "▶ Saving scan reports to target repository..."
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-ARTIFACTS_DIR="${GITHUB_WORKSPACE}/artifacts"
+ARTIFACTS_DIR="${GITHUB_WORKSPACE}/security-reports"
 mkdir -p "$ARTIFACTS_DIR"
 
 # Copy timestamped reports
-cp "$REPORT_DIR/issues_detailed.json" "$ARTIFACTS_DIR/security-scan-${TIMESTAMP}.json" 2>/dev/null || true
-cp "$REPORT_DIR/final_report.json" "$ARTIFACTS_DIR/full-report-${TIMESTAMP}.json" 2>/dev/null || true
+if [ -f "$REPORT_DIR/issues_detailed.json" ]; then
+    cp "$REPORT_DIR/issues_detailed.json" "$ARTIFACTS_DIR/scan-${TIMESTAMP}.json"
+    echo "  ✓ scan-${TIMESTAMP}.json"
+fi
 
-# Create a summary markdown file
+if [ -f "$REPORT_DIR/final_report.json" ]; then
+    cp "$REPORT_DIR/final_report.json" "$ARTIFACTS_DIR/full-${TIMESTAMP}.json"
+    echo "  ✓ full-${TIMESTAMP}.json"
+fi
+
+# Create summary markdown
 cat > "$ARTIFACTS_DIR/summary-${TIMESTAMP}.md" << EOF
-# Security Scan Report - ${TIMESTAMP}
+# Security Scan Report
 
-**Scan Date:** $(date)
-**Repository:** ${GITHUB_REPOSITORY}
-**Branch:** ${GITHUB_REF_NAME}
+**Timestamp:** ${TIMESTAMP}
+**Date:** $(date)
+**Repository:** ${GITHUB_REPOSITORY:-Unknown}
+**Branch:** ${GITHUB_REF_NAME:-Unknown}
 
-## Reports Available
-- \`security-scan-${TIMESTAMP}.json\` - Detailed issues with AI analysis
-- \`full-report-${TIMESTAMP}.json\` - Complete merged scanner output
+## Available Reports
+- \`scan-${TIMESTAMP}.json\` - Detailed issues with AI analysis
+- \`full-${TIMESTAMP}.json\` - Complete merged scanner output
 
-## View Reports
-Check the artifacts directory in your repository for detailed reports.
+## Note
+Reports are automatically saved in the \`security-reports/\` directory.
+To commit them, add a git commit step in your workflow.
 EOF
 
-echo "  ✓ Artifacts saved to: artifacts/"
-echo "    - security-scan-${TIMESTAMP}.json"
-echo "    - full-report-${TIMESTAMP}.json"
-echo "    - summary-${TIMESTAMP}.md"
+echo "  ✓ summary-${TIMESTAMP}.md"
+echo "  📁 Location: security-reports/"
 
 # === SECURITY POLICY ENFORCEMENT ===
 POLICY_EXIT_CODE=0
