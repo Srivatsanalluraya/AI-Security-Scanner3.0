@@ -39,6 +39,18 @@ semgrep --config auto --json --output "$REPORT_DIR/semgrep-report.json" "$SCAN_P
 echo "  - pip-audit (Python dependencies)..."
 pip-audit -f json -o "$REPORT_DIR/pip-audit-report.json" 2>/dev/null || true
 
+echo "  - Safety (Python dependencies)..."
+safety check --json --output "$REPORT_DIR/safety-report.json" 2>/dev/null || true
+
+# JavaScript/Node.js scanners
+if [ -f "package.json" ]; then
+    echo "  - npm audit (JavaScript dependencies)..."
+    npm audit --json > "$REPORT_DIR/npm-audit-report.json" 2>/dev/null || true
+    
+    echo "  - RetireJS (JavaScript vulnerabilities)..."
+    retire --js --outputformat json --outputpath "$REPORT_DIR/retire-report.json" 2>/dev/null || true
+fi
+
 echo ""
 echo "▶ Merging reports..."
 python /app/src/reporters/report_builder.py \

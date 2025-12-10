@@ -138,6 +138,57 @@ def extract_all_issues(report_dir) -> List[Dict]:
                     "fix": f"Update {dep.get('name')} to {vuln.get('fix_versions', 'latest version')}"
                 })
 
+    # -----------------------
+    # SAFETY extraction
+    # -----------------------
+    safety = load_json(f"{report_dir}/safety-report.json")
+    if safety and "vulnerabilities" in safety:
+        for vuln in safety["vulnerabilities"]:
+            issues.append({
+                "source": "Safety",
+                "package": vuln.get("package_name", "unknown"),
+                "file": "requirements.txt",
+                "line": 0,
+                "issue": vuln.get("vulnerability", "Dependency vulnerability"),
+                "severity": "HIGH",
+                "fix": f"Update to version {vuln.get('more_info_url', 'latest')}"
+            })
+
+    # -----------------------
+    # NPM AUDIT extraction
+    # -----------------------
+    npm_audit = load_json(f"{report_dir}/npm-audit-report.json")
+    if npm_audit and "vulnerabilities" in npm_audit:
+        for pkg_name, vuln_data in npm_audit.get("vulnerabilities", {}).items():
+            if isinstance(vuln_data, dict):
+                severity = vuln_data.get("severity", "medium").upper()
+                issues.append({
+                    "source": "npm-audit",
+                    "package": pkg_name,
+                    "file": "package.json",
+                    "line": 0,
+                    "issue": vuln_data.get("via", [{}])[0].get("title", "Dependency vulnerability") if isinstance(vuln_data.get("via"), list) else "Dependency vulnerability",
+                    "severity": extract_severity_level(severity),
+                    "fix": f"Run: npm update {pkg_name}"
+                })
+
+    # -----------------------
+    # RETIRE.JS extraction
+    # -----------------------
+    retire = load_json(f"{report_dir}/retire-report.json")
+    if retire and isinstance(retire, list):
+        for result in retire:
+            for vuln in result.get("results", []):
+                for finding in vuln.get("vulnerabilities", []):
+                    issues.append({
+                        "source": "RetireJS",
+                        "file": result.get("file", "JavaScript"),
+                        "line": 0,
+                        "issue": finding.get("info", ["Outdated JavaScript library"])[0],
+                        "severity": extract_severity_level(finding.get("severity", "medium")),
+                        "fix": "Update to latest version"
+                    })
+
     return issues
 
 
