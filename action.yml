@@ -1,5 +1,5 @@
-name: "AI Security Scanner"
-description: "Multi-language security scanner with AI-powered analysis. Scans Python, JavaScript, Java, Go with automated PR comments, policy enforcement, and downloadable reports."
+name: "Secure AI Scanner"
+description: "Multi-language security scanner with AI-powered analysis"
 author: "Srivatsa"
 
 branding:
