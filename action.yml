@@ -1,6 +1,6 @@
-name: "AI-Security-Scanner"
-description: "Multi-language security scanner with AI-powered analysis for Python, JavaScript, Java, and Go projects. Includes policy enforcement, dashboard reports, and PR integration."
-author: "Sri"
+name: "AI Security Scanner"
+description: "Multi-language security scanner with AI-powered analysis. Scans Python, JavaScript, Java, Go with automated PR comments, policy enforcement, and downloadable reports."
+author: "Srivatsa"
 
 branding:
   icon: shield

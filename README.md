@@ -1,5 +1,9 @@
 # AI Security Scanner 3.0
 
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-AI%20Security%20Scanner-blue.svg?colorA=24292e&colorB=0366d6&style=flat&longCache=true&logo=github)](https://github.com/marketplace/actions/ai-security-scanner)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-Required-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+
 **Multi-Language Security Scanner with AI-Powered Analysis**
 
 A comprehensive security scanning tool for Python, JavaScript/Node.js, Java, and Go projects with AI-powered vulnerability summarization, dashboard reporting, and policy enforcement.
@@ -46,27 +50,47 @@ A comprehensive security scanning tool for Python, JavaScript/Node.js, Java, and
 - Docker Desktop (only if you want to test locally)
 - GitHub token for PR comment testing
 
-## 🔧 Usage
+## � Quick Start
 
-### GitHub Actions (Recommended - No Docker Desktop Required!)
+Add this workflow to your repository at `.github/workflows/security.yml`:
 
 ```yaml
-name: Security Scan
-on: [push, pull_request]
+name: AI Security Scan
+
+permissions:
+  contents: write          # For committing reports
+  pull-requests: write     # For PR comments
+  security-events: write   # For security tab
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
 
 jobs:
   security-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Run AI Security Scanner
-        uses: your-username/ai-security-scanner@v3
+        uses: Srivatsanalluraya/AI-Security-Scanner3.0@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          scan_path: "."
-          enforce_policy: "true"
+          enforce_policy: "false"
+      
+      - name: Commit scan reports
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add security-reports/
+          git commit -m "📊 Security scan [skip ci]" || true
+          git push || true
 ```
+
+That's it! Push and the scanner runs automatically.
 
 ### Local Testing (Optional - Requires Docker Desktop)
 
