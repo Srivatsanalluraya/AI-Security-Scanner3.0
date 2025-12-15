@@ -75,7 +75,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Run AI Security Scanner
-        uses: Srivatsanalluraya/AI-Security-Scanner3.0@v1
+        uses: Srivatsanalluraya/AI-Security-Scanner3.0@v1.0.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           enforce_policy: "false"
