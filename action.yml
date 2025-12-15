@@ -1,5 +1,5 @@
 name: "Secure AI Scanner"
-description: "Multi-language security scanner with AI-powered analysis"
+description: "Multi-language security scanner with AI-powered analysis. Scans Python, JavaScript, Java, Go with automated PR comments, policy enforcement, and downloadable reports."
 author: "Srivatsa"
 
 branding:
@@ -20,6 +20,11 @@ inputs:
     description: "Enforce security policy: block push if HIGH severity issues >= 25% threshold"
     required: false
     default: "false"
+
+  google_api_key:
+    description: "Google API key for optional AI-powered analysis (uses pattern-based fallback if not provided)"
+    required: false
+    default: ""
 
 permissions:
   contents: read

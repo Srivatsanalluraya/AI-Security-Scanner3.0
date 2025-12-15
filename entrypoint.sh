@@ -6,9 +6,18 @@ echo "🔥 AI Vulnerability Scanner Starting..."
 SCAN_PATH=${1:-"."}
 RAW_TOKEN="$2"
 ENFORCE_POLICY="${INPUT_ENFORCE_POLICY:-false}"
+GOOGLE_API_KEY="${INPUT_GOOGLE_API_KEY:-}"
 
 # Prefer explicit token argument → fallback to env
 GITHUB_TOKEN="${RAW_TOKEN:-$GITHUB_TOKEN}"
+
+# Export API key for Python scripts (optional AI enhancement)
+if [[ -n "$GOOGLE_API_KEY" ]]; then
+    export GOOGLE_API_KEY
+    echo "🤖 AI enhancement enabled (Gemini)"
+else
+    echo "📊 Using pattern-based analysis (AI disabled)"
+fi
 
 if [[ -z "$GITHUB_TOKEN" ]]; then
     echo "❌ ERROR: GitHub token missing. Provide via 'github_token' input."

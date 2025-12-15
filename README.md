@@ -51,8 +51,13 @@ A comprehensive security scanning tool for Python, JavaScript/Node.js, Java, and
 - GitHub token for PR comment testing
 
 ## � Quick Start
+### Option 1: One-Click Setup (Recommended)
+1. Go to your repository's **Actions** tab
+2. Click **"New workflow"**
+3. Search for **"Secure AI Scanner"**
+4. Click **"Configure"** → **"Start commit"**
 
-Add this workflow to your repository at `.github/workflows/security.yml`:
+### Option 2: Manual SetupAdd this workflow to your repository at `.github/workflows/security.yml`:
 
 ```yaml
 name: AI Security Scan
@@ -79,6 +84,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           enforce_policy: "false"
+          google_api_key: ${{ secrets.GOOGLE_API_KEY }}  # Optional: Enable AI enhancements
       
       - name: Commit scan reports
         if: always()
@@ -139,6 +145,30 @@ docker run --rm \
 - `final_report.json`: Merged scanner outputs
 - `*-report.json`: Individual scanner reports
 - `languages.txt`: Detected languages in workspace
+
+## 🤖 AI Enhancement (Optional)
+
+The scanner includes optional AI-powered analysis using Google Gemini 1.5 Flash:
+- **Impact Statements**: Context-aware vulnerability impact analysis
+- **Fix Suggestions**: Tailored remediation recommendations
+
+**Without API Key**: Pattern-based analysis (fast, reliable, no setup)
+**With API Key**: AI-enhanced insights (more context-aware)
+
+### Enable AI Enhancement
+1. Get a free API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Add to repository secrets: `Settings` → `Secrets and variables` → `Actions` → `New repository secret`
+   - Name: `GOOGLE_API_KEY`
+   - Value: Your API key
+3. Update workflow:
+```yaml
+- uses: Srivatsanalluraya/AI-Security-Scanner3.0@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    google_api_key: ${{ secrets.GOOGLE_API_KEY }}  # Add this line
+```
+
+**Free Tier Limits**: 15 requests/min, 1500/day, 1M tokens/day
 
 ## 🛡️ Security Policy
 

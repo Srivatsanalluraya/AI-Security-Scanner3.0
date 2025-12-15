@@ -21,12 +21,8 @@ RUN pip install --no-cache-dir \
     bandit==1.7.9 \
     pip-audit==2.7.3 \
     safety \
-    transformers==4.37.2 \
-    torch \
-    requests \
-    sentencepiece \
-    safetensors \
-    accelerate
+    google-generativeai \
+    requests
 
 # Copy source files
 ARG CACHE_BUST
