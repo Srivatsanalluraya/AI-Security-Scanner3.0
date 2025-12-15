@@ -85,7 +85,7 @@ jobs:
         uses: Srivatsanalluraya/AI-Security-Scanner3.0@v1.0.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          enforce_policy: "false"
+          enforce_policy: "true"
           google_api_key: ${{ secrets.GOOGLE_API_KEY }}  # Optional: Enable AI enhancements
       
       - name: Commit scan reports
