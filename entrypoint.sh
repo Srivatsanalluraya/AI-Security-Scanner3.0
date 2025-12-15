@@ -163,10 +163,28 @@ if [[ -n "$GITHUB_EVENT_PATH" ]]; then
 fi
 
 echo ""
+echo "======================================================================"
 if [[ $POLICY_EXIT_CODE -ne 0 ]]; then
-    echo "Γ¥î Scan complete - Push blocked by security policy"
+    echo "❌ WORKFLOW FAILED - MERGE BLOCKED BY SECURITY POLICY"
+    echo "======================================================================"
+    echo ""
+    echo "🚨 HIGH severity vulnerabilities exceed 25% threshold"
+    echo "📋 Review security scan results above"
+    echo "🔧 Fix critical issues and push changes to unblock"
+    echo ""
+    echo "This PR cannot be merged until security issues are resolved."
+    echo "======================================================================"
 else
-    echo "Γ£à Scan complete!"
+    echo "✅ SECURITY SCAN COMPLETED SUCCESSFULLY"
+    echo "======================================================================"
+    if [[ "$ENFORCE_POLICY" == "true" ]]; then
+        echo ""
+        echo "✓ Security policy check passed"
+        echo "✓ Merge is allowed (review recommended)"
+    fi
+    echo ""
+    echo "🎉 Scan complete!"
+    echo "======================================================================"
 fi
 
 exit $POLICY_EXIT_CODE
