@@ -4,14 +4,29 @@ Structured AI summarizer for Bandit, Semgrep, pip-audit results.
 - Extracts each issue
 - Summarizes issue, consequence, fix separately
 - Produces consistent PR-ready output with Impact and Fix suggestions
+- Optional Google Gemini AI enhancement (falls back to pattern-based if no API key)
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
-
-MODEL_NAME = "google/flan-t5-small"
+# Try to import Gemini, fall back gracefully if not available
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+    API_KEY = os.getenv("GOOGLE_API_KEY")
+    if API_KEY:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        print("✓ Google Gemini AI enabled")
+    else:
+        GEMINI_AVAILABLE = False
+        print("⚠ No GOOGLE_API_KEY found, using pattern-based analysis")
+except Exception as e:
+    GEMINI_AVAILABLE = False
+    print(f"⚠ Gemini not available: {e}, using pattern-based analysis")
 
 
 def load_json(path):
@@ -37,48 +52,80 @@ def extract_severity_level(severity_str: str) -> str:
 
 
 def generate_impact_statement(issue: Dict) -> str:
-    """Generate a concise impact statement for the issue."""
+    """Generate a concise impact statement for the issue using AI or patterns."""
     source = issue.get("source", "Unknown")
     severity = extract_severity_level(issue.get("severity", "MEDIUM"))
+    issue_text = str(issue.get("issue", ""))
     
-    issue_text = str(issue.get("issue", "")).lower()
+    # Try AI-powered analysis first if available
+    if GEMINI_AVAILABLE and API_KEY:
+        try:
+            prompt = f"""Analyze this security issue in 1 sentence (max 100 chars):
+Issue: {issue_text[:200]}
+Severity: {severity}
+Source: {source}
+
+Provide impact in format: [{severity}] Brief impact - consequence"""
+            
+            response = model.generate_content(prompt)
+            if response and response.text:
+                return response.text.strip()[:200]
+        except Exception as e:
+            print(f"⚠ AI analysis failed, using patterns: {e}")
     
-    # Determine impact based on common vulnerability patterns
-    if any(x in issue_text for x in ["sql", "injection", "command"]):
+    # Fallback to pattern-based analysis (original logic)
+    issue_lower = issue_text.lower()
+    if any(x in issue_lower for x in ["sql", "injection", "command"]):
         return f"[{severity}] Code/SQL injection risk - Attacker could execute arbitrary code or queries"
-    elif any(x in issue_text for x in ["hardcoded", "password", "secret", "key", "token"]):
+    elif any(x in issue_lower for x in ["hardcoded", "password", "secret", "key", "token"]):
         return f"[{severity}] Credential exposure - Hardcoded sensitive data could be compromised"
-    elif any(x in issue_text for x in ["pickle", "deserial"]):
+    elif any(x in issue_lower for x in ["pickle", "deserial"]):
         return f"[{severity}] Unsafe deserialization - Could lead to arbitrary code execution"
-    elif any(x in issue_text for x in ["eval", "exec"]):
+    elif any(x in issue_lower for x in ["eval", "exec"]):
         return f"[{severity}] Dynamic code execution - Unsafe evaluation of untrusted input"
-    elif any(x in issue_text for x in ["authentication", "authorization", "permission"]):
+    elif any(x in issue_lower for x in ["authentication", "authorization", "permission"]):
         return f"[{severity}] Access control issue - Unauthorized access possible"
-    elif any(x in issue_text for x in ["crypto", "encryption", "hash"]):
+    elif any(x in issue_lower for x in ["crypto", "encryption", "hash"]):
         return f"[{severity}] Weak cryptography - Insufficient security for sensitive operations"
-    elif "vulnerability" in issue_text or "cve" in issue_text:
+    elif "vulnerability" in issue_lower or "cve" in issue_lower:
         return f"[{severity}] Known vulnerability - Update dependency to patched version"
     else:
         return f"[{severity}] Security issue detected by {source}"
 
 
 def generate_fix_suggestion(issue: Dict) -> str:
-    """Generate a concise fix suggestion."""
-    issue_text = str(issue.get("issue", "")).lower()
+    """Generate a concise fix suggestion using AI or patterns."""
+    issue_text = str(issue.get("issue", ""))
     source = issue.get("source", "Unknown")
     
-    # Provide specific fixes based on issue type
-    if any(x in issue_text for x in ["sql", "injection"]):
+    # Try AI-powered fix suggestion first if available
+    if GEMINI_AVAILABLE and API_KEY:
+        try:
+            prompt = f"""Suggest 1 specific fix for this security issue (max 100 chars):
+Issue: {issue_text[:200]}
+Source: {source}
+
+Provide actionable fix suggestion (be concise and specific)."""
+            
+            response = model.generate_content(prompt)
+            if response and response.text:
+                return response.text.strip()[:250]
+        except Exception as e:
+            print(f"⚠ AI fix suggestion failed, using patterns: {e}")
+    
+    # Fallback to pattern-based fixes (original logic)
+    issue_lower = issue_text.lower()
+    if any(x in issue_lower for x in ["sql", "injection"]):
         return "Use parameterized queries or prepared statements; never concatenate user input into SQL"
-    elif any(x in issue_text for x in ["hardcoded", "password", "secret", "key"]):
+    elif any(x in issue_lower for x in ["hardcoded", "password", "secret", "key"]):
         return "Move credentials to environment variables or secure vaults (e.g., .env, AWS Secrets Manager)"
-    elif any(x in issue_text for x in ["pickle"]):
+    elif any(x in issue_lower for x in ["pickle"]):
         return "Replace pickle with JSON, Protocol Buffers, or other safe serialization formats"
-    elif any(x in issue_text for x in ["eval", "exec"]):
+    elif any(x in issue_lower for x in ["eval", "exec"]):
         return "Avoid eval/exec; use ast.literal_eval or dedicated parsing libraries for specific data types"
-    elif any(x in issue_text for x in ["authentication", "authorization"]):
+    elif any(x in issue_lower for x in ["authentication", "authorization"]):
         return "Implement proper access control checks; validate user permissions before operations"
-    elif any(x in issue_text for x in ["crypto", "encryption", "md5", "sha1"]):
+    elif any(x in issue_lower for x in ["crypto", "encryption", "md5", "sha1"]):
         return "Use modern algorithms (bcrypt for passwords, SHA-256+ for hashing, AES for encryption)"
     elif source == "pip-audit":
         return issue.get("fix", "Update dependency to latest patched version")
