@@ -78,6 +78,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for proper git operations
       
       - name: Run AI Security Scanner
         uses: Srivatsanalluraya/AI-Security-Scanner3.0@v1.0.0
@@ -91,9 +93,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add security-reports/
-          git commit -m "📊 Security scan [skip ci]" || true
-          git push || true
+          git add security-reports/ || true
+          git commit -m "📊 Security scan [skip ci]" || echo "No changes to commit"
+          git push || echo "Push failed or no changes"
 ```
 
 That's it! Push and the scanner runs automatically.
