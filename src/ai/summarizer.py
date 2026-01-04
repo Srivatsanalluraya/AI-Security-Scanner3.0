@@ -23,7 +23,7 @@ try:
         print("✓ Google Gemini AI enabled")
     else:
         GEMINI_AVAILABLE = False
-        print("GOOGLE_API_KEY found, using pattern-based analysis")
+        print("ℹ️ GOOGLE_API_KEY not found, using pattern-based analysis")
 except Exception as e:
     GEMINI_AVAILABLE = False
     print(f"⚠ Gemini not available: {e}, using pattern-based analysis")

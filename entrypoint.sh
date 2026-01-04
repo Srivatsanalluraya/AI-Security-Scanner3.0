@@ -152,12 +152,16 @@ if [[ -n "$GITHUB_EVENT_PATH" ]]; then
             POLICY_FLAG="--enforce-policy"
         fi
         
+        # Get commit SHA for status check
+        COMMIT_SHA=$(jq -r ".pull_request.head.sha // empty" "$GITHUB_EVENT_PATH" 2>/dev/null || echo "")
+        
         # Use issues_detailed.json for consistent counts with dashboard
         python /app/src/reporters/pr_commenter.py \
             --report "$REPORT_DIR/issues_detailed.json" \
             --repo "$GITHUB_REPOSITORY" \
             --pr "$PR_NUMBER" \
             --token "$GITHUB_TOKEN" \
+            --sha "$COMMIT_SHA" \
             $POLICY_FLAG 2>/dev/null || echo "  ΓÜá∩╕Å Failed to post PR comment"
     fi
 fi

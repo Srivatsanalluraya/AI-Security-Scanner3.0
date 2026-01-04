@@ -143,8 +143,45 @@ Your code changes contain **{high_count} HIGH severity** security issues, which 
         return "WARNING", msg, True
 
 
+def build_pie_chart_ascii(proportions: Dict[str, float], counts: Dict[str, int]) -> str:
+    """Generate an ASCII pie chart for severity distribution."""
+    total = sum(counts.values())
+    if total == 0:
+        return "No issues detected"
+    
+    # Calculate segments (use 20 segments for better resolution)
+    segments = 20
+    high_segments = round((proportions['HIGH'] / 100) * segments)
+    med_segments = round((proportions['MEDIUM'] / 100) * segments)
+    low_segments = segments - high_segments - med_segments
+    
+    # Build pie chart using block characters
+    chart_lines = []
+    chart_lines.append("```")
+    chart_lines.append("     ╔═══════════════════════════════════════╗")
+    chart_lines.append("     ║     SEVERITY DISTRIBUTION (%)         ║")
+    chart_lines.append("     ╠═══════════════════════════════════════╣")
+    
+    # Create circular representation
+    pie_line = "     ║  "
+    pie_line += "█" * high_segments if high_segments > 0 else ""
+    pie_line += "▓" * med_segments if med_segments > 0 else ""
+    pie_line += "░" * low_segments if low_segments > 0 else ""
+    pie_line += " " * (20 - len(pie_line) + 11)
+    chart_lines.append(pie_line + "║")
+    
+    chart_lines.append("     ╠═══════════════════════════════════════╣")
+    chart_lines.append(f"     ║  █ HIGH:   {proportions['HIGH']:>5}% ({counts['HIGH']:>3} issues) ║")
+    chart_lines.append(f"     ║  ▓ MEDIUM: {proportions['MEDIUM']:>5}% ({counts['MEDIUM']:>3} issues) ║")
+    chart_lines.append(f"     ║  ░ LOW:    {proportions['LOW']:>5}% ({counts['LOW']:>3} issues) ║")
+    chart_lines.append("     ╚═══════════════════════════════════════╝")
+    chart_lines.append("```")
+    
+    return "\n".join(chart_lines)
+
+
 def build_dashboard_section(issues: List[Dict]) -> str:
-    """Build dashboard-style report for PR comment."""
+    """Build dashboard-style report for PR comment with graphical elements."""
     if not issues:
         return ""
     
@@ -158,23 +195,46 @@ def build_dashboard_section(issues: List[Dict]) -> str:
     med_count = sum(1 for i in issues if i.get("severity") == "MEDIUM")
     low_count = sum(1 for i in issues if i.get("severity") == "LOW")
     
-    lines.append("### Scan Summary")
-    lines.append(f"- **Total Issues**: {len(issues)}")
-    lines.append(f"- **HIGH** ({proportions['HIGH']}%): {high_count}")
-    lines.append(f"- **MEDIUM** ({proportions['MEDIUM']}%): {med_count}")
-    lines.append(f"- **LOW** ({proportions['LOW']}%): {low_count}\n")
+    counts = {"HIGH": high_count, "MEDIUM": med_count, "LOW": low_count}
     
-    # Severity bars
-    lines.append("### Issue Distribution")
-    high_bar = "🔴" * min(10, max(1, high_count)) if high_count > 0 else ""
-    med_bar = "🟡" * min(10, max(1, med_count)) if med_count > 0 else ""
-    low_bar = "🔵" * min(10, max(1, low_count)) if low_count > 0 else ""
-    if high_bar:
-        lines.append(f"HIGH:   {high_bar} ({high_count})")
-    if med_bar:
-        lines.append(f"MEDIUM: {med_bar} ({med_count})")
-    if low_bar:
-        lines.append(f"LOW:    {low_bar} ({low_count})")
+    # Add pie chart
+    lines.append("### Severity Distribution")
+    lines.append(build_pie_chart_ascii(proportions, counts))
+    lines.append("")
+    
+    # Add bar chart
+    lines.append("### Issue Breakdown")
+    lines.append("```")
+    max_bar_width = 30
+    total = len(issues)
+    
+    # HIGH bar
+    high_bar_width = int((high_count / total) * max_bar_width) if total > 0 else 0
+    high_bar = "█" * high_bar_width
+    lines.append(f"HIGH   │{high_bar:<{max_bar_width}}│ {high_count:>3} ({proportions['HIGH']:>5.1f}%)")
+    
+    # MEDIUM bar
+    med_bar_width = int((med_count / total) * max_bar_width) if total > 0 else 0
+    med_bar = "█" * med_bar_width
+    lines.append(f"MEDIUM │{med_bar:<{max_bar_width}}│ {med_count:>3} ({proportions['MEDIUM']:>5.1f}%)")
+    
+    # LOW bar
+    low_bar_width = int((low_count / total) * max_bar_width) if total > 0 else 0
+    low_bar = "█" * low_bar_width
+    lines.append(f"LOW    │{low_bar:<{max_bar_width}}│ {low_count:>3} ({proportions['LOW']:>5.1f}%)")
+    lines.append("       └" + "─" * max_bar_width + "┘")
+    lines.append(f"       Total: {total} issues detected")
+    lines.append("```")
+    lines.append("")
+    
+    # Emoji indicators
+    lines.append("### Quick Status")
+    if proportions['HIGH'] >= 25:
+        lines.append("🔴 **CRITICAL** - Immediate attention required")
+    elif proportions['HIGH'] >= 10:
+        lines.append("🟠 **WARNING** - Security review recommended")
+    else:
+        lines.append("🟢 **GOOD** - Low risk level detected")
     lines.append("")
     
     return "\n".join(lines)
@@ -321,6 +381,38 @@ This automated security scan found **no security issues**.
     return comment
 
 
+def set_commit_status(repo: str, sha: str, token: str, state: str, description: str, context: str = "AI Security Scanner"):
+    """Set commit status to block/allow PR merge.
+    
+    Args:
+        repo: Repository in format 'owner/repo'
+        sha: Commit SHA to set status on
+        token: GitHub token
+        state: 'success', 'failure', 'error', or 'pending'
+        description: Status description
+        context: Status check name
+    """
+    url = f"https://api.github.com/repos/{repo}/statuses/{sha}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json"
+    }
+    
+    payload = {
+        "state": state,
+        "description": description,
+        "context": context
+    }
+    
+    resp = requests.post(url, headers=headers, json=payload)
+    
+    if resp.status_code >= 300:
+        print(f"⚠️ Warning: Could not set commit status: {resp.status_code} {resp.text}")
+    else:
+        status_emoji = "✅" if state == "success" else "❌"
+        print(f"{status_emoji} Set commit status to '{state}': {description}")
+
+
 def post_comment(repo: str, pr_number: str, token: str, comment: str):
     """Post comment to GitHub PR."""
     url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
@@ -392,6 +484,7 @@ def main():
     parser.add_argument("--repo", required=True, help="owner/repo")
     parser.add_argument("--pr", required=True, help="Pull request number")
     parser.add_argument("--token", required=False, help="GitHub token")
+    parser.add_argument("--sha", required=False, help="Commit SHA (for blocking merge)")
     parser.add_argument("--pushed-by", default="", help="GitHub username who pushed")
     parser.add_argument("--enforce-policy", action="store_true", help="Enforce push restrictions")
 
@@ -413,6 +506,30 @@ def main():
     # Build and post comment
     comment_body = build_comment_body(issues, pushed_by=args.pushed_by, allow_push=allow_push)
     post_comment(args.repo, args.pr, token, comment_body)
+    
+    # Set commit status to block/allow merge
+    if args.sha:
+        proportions = calculate_severity_proportions(issues)
+        if proportions["HIGH"] >= 25:
+            # Block merge
+            set_commit_status(
+                repo=args.repo,
+                sha=args.sha,
+                token=token,
+                state="failure",
+                description=f"❌ {proportions['HIGH']}% HIGH severity issues (threshold: 25%)",
+                context="AI Security Scanner / Merge Policy"
+            )
+        else:
+            # Allow merge
+            set_commit_status(
+                repo=args.repo,
+                sha=args.sha,
+                token=token,
+                state="success",
+                description=f"✅ {proportions['HIGH']}% HIGH severity issues (threshold: 25%)",
+                context="AI Security Scanner / Merge Policy"
+            )
     
     # Enforce policy if requested
     if args.enforce_policy:

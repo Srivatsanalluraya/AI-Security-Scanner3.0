@@ -36,7 +36,7 @@ class ReportDisplay:
         print("\n" + "=" * 80)
     
     def display_detailed_report(self):
-        """Display the detailed issues report."""
+        """Display the detailed issues report with graphical elements."""
         detail_file = self.report_dir / "issues_detailed.json"
         
         if not detail_file.exists():
@@ -49,20 +49,63 @@ class ReportDisplay:
         try:
             data = json.loads(detail_file.read_text(encoding="utf-8"))
             
-            # Summary metrics
-            print(f"Total Issues: {data.get('total_issues', 0)}")
-            print("\nIssues by Severity:")
-            for severity, count in data.get("severity_counts", {}).items():
-                print(f"  • {severity}: {count}")
+            total_issues = data.get('total_issues', 0)
+            severity_counts = data.get("severity_counts", {})
             
-            print("\nIssues by Source:")
+            # Summary metrics
+            print(f"Total Issues: {total_issues}\n")
+            
+            # Graphical pie chart for console
+            if total_issues > 0:
+                high_count = severity_counts.get("HIGH", 0)
+                med_count = severity_counts.get("MEDIUM", 0)
+                low_count = severity_counts.get("LOW", 0)
+                
+                high_pct = (high_count / total_issues) * 100
+                med_pct = (med_count / total_issues) * 100
+                low_pct = (low_count / total_issues) * 100
+                
+                print("     ╔════════════════════════════════════════╗")
+                print("     ║     SEVERITY DISTRIBUTION (%)         ║")
+                print("     ╠════════════════════════════════════════╣")
+                
+                # Create visual bar
+                segments = 20
+                high_segs = round((high_pct / 100) * segments)
+                med_segs = round((med_pct / 100) * segments)
+                low_segs = segments - high_segs - med_segs
+                
+                bar = "█" * high_segs + "▓" * med_segs + "░" * low_segs
+                print(f"     ║  {bar}  ║")
+                print("     ╠════════════════════════════════════════╣")
+                print(f"     ║  █ HIGH:   {high_pct:>5.1f}% ({high_count:>3} issues) ║")
+                print(f"     ║  ▓ MEDIUM: {med_pct:>5.1f}% ({med_count:>3} issues) ║")
+                print(f"     ║  ░ LOW:    {low_pct:>5.1f}% ({low_count:>3} issues) ║")
+                print("     ╚════════════════════════════════════════╝\n")
+                
+                # Bar chart
+                print("Issues by Severity:")
+                max_bar = 40
+                if high_count > 0:
+                    high_bar = "█" * min(max_bar, max(1, int((high_count / total_issues) * max_bar)))
+                    print(f"  HIGH   │{high_bar:<{max_bar}}│ {high_count}")
+                if med_count > 0:
+                    med_bar = "█" * min(max_bar, max(1, int((med_count / total_issues) * max_bar)))
+                    print(f"  MEDIUM │{med_bar:<{max_bar}}│ {med_count}")
+                if low_count > 0:
+                    low_bar = "█" * min(max_bar, max(1, int((low_count / total_issues) * max_bar)))
+                    print(f"  LOW    │{low_bar:<{max_bar}}│ {low_count}")
+                print(f"         └{'─' * max_bar}┘\n")
+            
+            print("Issues by Source:")
             for source, count in data.get("issues_by_source", {}).items():
                 print(f"  • {source}: {count}")
             
             # Brief issue list
             print("\nTop Issues:")
             for issue in data.get("detailed_issues", [])[:5]:
-                print(f"  {issue['number']}. [{issue['source']}] {issue['severity']}: {issue['description'][:60]}...")
+                severity_emoji = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🔵"}.get(issue.get('severity', ''), "⚪")
+                print(f"  {severity_emoji} {issue['number']}. [{issue['source']}] {issue['severity']}: {issue['description'][:60]}...")
             
             if len(data.get("detailed_issues", [])) > 5:
                 print(f"  ... and {len(data['detailed_issues']) - 5} more issues")
