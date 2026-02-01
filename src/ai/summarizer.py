@@ -12,51 +12,104 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# Try to import Groq client, fall back gracefully if not available
-# This is intentionally tolerant because different versions of the SDK
-# may export the client under different names or provide a factory.
-GROQ_AVAILABLE = False
-API_KEY = os.getenv("GROQ_API_KEY")
-client = None
-try:
-    import groq
+def _init_groq_client():
+    """Discover and instantiate a Groq client if available.
 
-    GroqClient = None
-    # Common export patterns
-    if hasattr(groq, "GroqClient"):
-        GroqClient = groq.GroqClient
-    elif hasattr(groq, "Client"):
-        GroqClient = groq.Client
-    elif hasattr(groq, "client") and hasattr(groq.client, "GroqClient"):
-        GroqClient = groq.client.GroqClient
-    elif hasattr(groq, "create_client"):
-        GroqClient = groq.create_client
-    else:
-        # Try a direct submodule import as a last resort
-        try:
-            from groq.client import GroqClient as _GC
-            GroqClient = _GC
-        except Exception:
-            GroqClient = None
-
-    if GroqClient is None:
-        raise ImportError("Groq client class or factory not found in 'groq' package")
-
-    GROQ_AVAILABLE = True
-    if API_KEY:
-        # Instantiate or call the factory with the API key
-        try:
-            client = GroqClient(api_key=API_KEY)
-        except TypeError:
-            # Some factories may accept different kwarg names
-            client = GroqClient(API_KEY)
-        print("✓ Groq AI enabled")
-    else:
-        GROQ_AVAILABLE = False
-        print("ℹ️ GROQ_API_KEY not found, using pattern-based analysis")
-except Exception as e:
+    This function is tolerant of different package shapes and avoids
+    raising hard ImportErrors; it returns a tuple (available: bool, client)
+    so tests can mock different package shapes.
+    """
+    global GROQ_AVAILABLE, client
     GROQ_AVAILABLE = False
-    print(f"⚠ Groq AI not available: {e}, using pattern-based analysis")
+    client = None
+
+    API_KEY_LOCAL = os.getenv("GROQ_API_KEY")
+
+    try:
+        import importlib
+        groq = importlib.import_module("groq")
+
+        # Try to find a callable factory or client class
+        client_factory = None
+        chosen = None
+
+        # Look for obvious names first
+        for name in ("GroqClient", "Client", "create_client", "client"):
+            if hasattr(groq, name):
+                attr = getattr(groq, name)
+                if callable(attr):
+                    client_factory = attr
+                    chosen = f"groq.{name}"
+                    break
+
+        # Inspect package attributes for candidate factories
+        if client_factory is None:
+            for name in dir(groq):
+                if name.startswith("_"):
+                    continue
+                ln = name.lower()
+                if "client" in ln or name.lower().startswith("create"):
+                    attr = getattr(groq, name)
+                    if callable(attr):
+                        client_factory = attr
+                        chosen = f"groq.{name}"
+                        break
+
+        # Try submodule groq.client
+        if client_factory is None:
+            try:
+                mod = importlib.import_module("groq.client")
+                for name in dir(mod):
+                    if name.startswith("_"):
+                        continue
+                    attr = getattr(mod, name)
+                    if callable(attr) and ("client" in name.lower() or "groq" in name.lower()):
+                        client_factory = attr
+                        chosen = f"groq.client.{name}"
+                        break
+            except Exception:
+                pass
+
+        if client_factory is None:
+            # No factory found — groq package exists but no client exports
+            print("⚠ groq package installed but no client factory found, using pattern-based analysis")
+            return False, None
+
+        # If no API key provided, don't instantiate and keep available flag false
+        if not API_KEY_LOCAL:
+            print("ℹ️ GROQ_API_KEY not found, using pattern-based analysis")
+            GROQ_AVAILABLE = False
+            return False, None
+
+        # Try to instantiate with common signatures
+        creation_err = None
+        try:
+            client_obj = client_factory(api_key=API_KEY_LOCAL)
+        except TypeError:
+            try:
+                client_obj = client_factory(API_KEY_LOCAL)
+            except Exception as e:
+                creation_err = e
+                client_obj = None
+        except Exception as e:
+            creation_err = e
+            client_obj = None
+
+        if client_obj is None:
+            raise ImportError(f"Failed to instantiate Groq client using {chosen}: {creation_err}")
+
+        client = client_obj
+        GROQ_AVAILABLE = True
+        print(f"✓ Groq AI enabled via {chosen}")
+        return True, client
+
+    except Exception as e:
+        print(f"⚠ Groq AI not available: {e}, using pattern-based analysis")
+        return False, None
+
+
+# Initialize on import
+_init_groq_client()
 
 
 def _groq_generate(prompt: str) -> Optional[str]:
