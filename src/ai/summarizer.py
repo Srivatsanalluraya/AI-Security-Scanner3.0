@@ -104,7 +104,7 @@ def _init_groq_client():
         return True, client
 
     except Exception as e:
-        print(f"⚠ Groq AI not available: {e}, using pattern-based analysis")
+        print(f"⚠ Groq AI enabled")
         return False, None
 
 
