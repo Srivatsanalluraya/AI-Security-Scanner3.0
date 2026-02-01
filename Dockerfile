@@ -21,8 +21,8 @@ RUN pip install --no-cache-dir \
     bandit==1.7.9 \
     pip-audit==2.7.3 \
     safety \
-    groq \
-    requests
+    requests \
+    && pip install --no-cache-dir --upgrade groq pytest
 
 # Copy source files
 ARG CACHE_BUST
