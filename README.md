@@ -86,7 +86,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           enforce_policy: "true"
-          google_api_key: ${{ secrets.GOOGLE_API_KEY }}  # Optional: Enable AI enhancements
+          groq_api_key: ${{ secrets.GROQ_API_KEY }}  # Optional: Enable AI enhancements
       
       - name: Commit scan reports
         if: always()
@@ -150,7 +150,7 @@ docker run --rm \
 
 ## 🤖 AI Enhancement (Optional)
 
-The scanner includes optional AI-powered analysis using Google Gemini 1.5 Flash:
+The scanner includes optional AI-powered analysis using Groq AI:
 - **Impact Statements**: Context-aware vulnerability impact analysis
 - **Fix Suggestions**: Tailored remediation recommendations
 
@@ -158,16 +158,16 @@ The scanner includes optional AI-powered analysis using Google Gemini 1.5 Flash:
 **With API Key**: AI-enhanced insights (more context-aware)
 
 ### Enable AI Enhancement
-1. Get a free API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+1. Get an API key from Groq (see Groq documentation for details)
 2. Add to repository secrets: `Settings` → `Secrets and variables` → `Actions` → `New repository secret`
-   - Name: `GOOGLE_API_KEY`
+   - Name: `GROQ_API_KEY`
    - Value: Your API key
 3. Update workflow:
 ```yaml
 - uses: Srivatsanalluraya/AI-Security-Scanner3.0@v1
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
-    google_api_key: ${{ secrets.GOOGLE_API_KEY }}  # Add this line
+    groq_api_key: ${{ secrets.GROQ_API_KEY }}  # Add this line
 ```
 
 **Free Tier Limits**: 15 requests/min, 1500/day, 1M tokens/day

@@ -21,8 +21,8 @@ inputs:
     required: false
     default: "false"
 
-  google_api_key:
-    description: "Google API key for optional AI-powered analysis (uses pattern-based fallback if not provided)"
+  groq_api_key:
+    description: "Groq API key for optional AI-powered analysis (uses pattern-based fallback if not provided)"
     required: false
     default: ""
 

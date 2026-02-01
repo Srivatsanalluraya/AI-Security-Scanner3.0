@@ -298,4 +298,4 @@ git push origin --delete test-security-block
 
 ### API key errors?
 - Scanner works without AI - pattern-based analysis is fallback
-- Optional: Add `GOOGLE_API_KEY` secret for AI enhancement
+- Optional: Add `GROQ_API_KEY` secret for AI enhancement

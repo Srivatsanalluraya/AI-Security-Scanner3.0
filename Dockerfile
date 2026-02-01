@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir \
     bandit==1.7.9 \
     pip-audit==2.7.3 \
     safety \
-    google-generativeai \
+    groq \
     requests
 
 # Copy source files

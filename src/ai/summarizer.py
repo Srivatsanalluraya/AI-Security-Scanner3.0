@@ -4,7 +4,7 @@ Structured AI summarizer for Bandit, Semgrep, pip-audit results.
 - Extracts each issue
 - Summarizes issue, consequence, fix separately
 - Produces consistent PR-ready output with Impact and Fix suggestions
-- Optional Google Gemini AI enhancement (falls back to pattern-based if no API key)
+- Optional Groq AI enhancement (falls back to pattern-based if no API key)
 """
 
 import json
@@ -12,21 +12,58 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# Try to import Gemini, fall back gracefully if not available
+# Try to import Groq client, fall back gracefully if not available
 try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-    API_KEY = os.getenv("GOOGLE_API_KEY")
+    from groq import GroqClient
+    GROQ_AVAILABLE = True
+    API_KEY = os.getenv("GROQ_API_KEY")
     if API_KEY:
-        genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        print("✓ Google Gemini AI enabled")
+        client = GroqClient(api_key=API_KEY)
+        print("✓ Groq AI enabled")
     else:
-        GEMINI_AVAILABLE = False
-        print("ℹ️ GOOGLE_API_KEY not found, using pattern-based analysis")
+        GROQ_AVAILABLE = False
+        print("ℹ️ GROQ_API_KEY not found, using pattern-based analysis")
 except Exception as e:
-    GEMINI_AVAILABLE = False
-    print(f"⚠ Gemini not available: {e}, using pattern-based analysis")
+    GROQ_AVAILABLE = False
+    print(f"⚠ Groq AI not available: {e}, using pattern-based analysis")
+
+
+def _groq_generate(prompt: str) -> Optional[str]:
+    """Attempt to generate text using a Groq client with flexible handling of common return types."""
+    try:
+        if 'client' not in globals():
+            return None
+
+        # Try common client.generate form
+        if hasattr(client, "generate"):
+            r = client.generate(prompt=prompt, model="groq-1")
+            # Try attribute or dict access
+            text = getattr(r, "text", None) or (r.get("text") if isinstance(r, dict) else None)
+            if text:
+                return text.strip()
+
+        # Try client.responses.create (newer patterns)
+        if hasattr(client, "responses") and hasattr(client.responses, "create"):
+            r = client.responses.create(model="groq-1", input=prompt)
+            # dict-like response handling
+            if isinstance(r, dict):
+                if "output_text" in r and r["output_text"]:
+                    return r["output_text"].strip()
+                outputs = r.get("outputs") or []
+                if outputs:
+                    return "".join(o.get("content", "") for o in outputs if isinstance(o, dict)).strip()
+            # attribute-based response handling
+            if hasattr(r, "output_text") and r.output_text:
+                return r.output_text.strip()
+            if hasattr(r, "output") and r.output:
+                out = r.output
+                if isinstance(out, str):
+                    return out.strip()
+                if isinstance(out, list):
+                    return "".join([o.get("content", "") for o in out if isinstance(o, dict)]).strip()
+    except Exception as e:
+        print(f"⚠ Groq API call failed, using patterns: {e}")
+    return None
 
 
 def load_json(path):
@@ -58,7 +95,7 @@ def generate_impact_statement(issue: Dict) -> str:
     issue_text = str(issue.get("issue", ""))
     
     # Try AI-powered analysis first if available
-    if GEMINI_AVAILABLE and API_KEY:
+    if GROQ_AVAILABLE and API_KEY:
         try:
             prompt = f"""Analyze this security issue in 1 sentence (max 100 chars):
 Issue: {issue_text[:200]}
@@ -66,12 +103,12 @@ Severity: {severity}
 Source: {source}
 
 Provide impact in format: [{severity}] Brief impact - consequence"""
-            
-            response = model.generate_content(prompt)
-            if response and response.text:
-                return response.text.strip()[:200]
+
+            response_text = _groq_generate(prompt)
+            if response_text:
+                return response_text[:200]
         except Exception as e:
-            print(f"⚠ AI analysis failed, using patterns: {e}")
+            print(f"⚠ Groq API call failed, using patterns: {e}")
     
     # Fallback to pattern-based analysis (original logic)
     issue_lower = issue_text.lower()
@@ -99,19 +136,19 @@ def generate_fix_suggestion(issue: Dict) -> str:
     source = issue.get("source", "Unknown")
     
     # Try AI-powered fix suggestion first if available
-    if GEMINI_AVAILABLE and API_KEY:
+    if GROQ_AVAILABLE and API_KEY:
         try:
             prompt = f"""Suggest 1 specific fix for this security issue (max 100 chars):
 Issue: {issue_text[:200]}
 Source: {source}
 
 Provide actionable fix suggestion (be concise and specific)."""
-            
-            response = model.generate_content(prompt)
-            if response and response.text:
-                return response.text.strip()[:250]
+
+            response_text = _groq_generate(prompt)
+            if response_text:
+                return response_text[:250]
         except Exception as e:
-            print(f"⚠ AI fix suggestion failed, using patterns: {e}")
+            print(f"⚠ Groq API call failed, using patterns: {e}")
     
     # Fallback to pattern-based fixes (original logic)
     issue_lower = issue_text.lower()

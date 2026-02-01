@@ -1,7 +1,7 @@
 # AI Enhancement Implementation
 
 ## Overview
-Successfully integrated Google Gemini 1.5 Flash as an optional AI enhancement while maintaining full backward compatibility. The scanner works perfectly without an API key using pattern-based analysis.
+Successfully integrated Groq AI as an optional AI enhancement while maintaining full backward compatibility. The scanner works perfectly without an API key using pattern-based analysis.
 
 ## Changes Made
 
@@ -13,27 +13,26 @@ Successfully integrated Google Gemini 1.5 Flash as an optional AI enhancement wh
   - `safetensors`
   - `accelerate`
 - **Added**: Lightweight AI package (~10MB)
-  - `google-generativeai`
+  - `groq`
 
 ### 2. src/ai/summarizer.py
-Enhanced with optional Gemini AI:
+Enhanced with optional Groq AI:
 
-#### Import Block (Lines 16-28)
+#### Import Block (Lines 16-32)
 ```python
 try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-    API_KEY = os.getenv("GOOGLE_API_KEY")
+    from groq import GroqClient
+    GROQ_AVAILABLE = True
+    API_KEY = os.getenv("GROQ_API_KEY")
     if API_KEY:
-        genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        print("✓ Google Gemini AI enabled")
+        client = GroqClient(api_key=API_KEY)
+        print("✓ Groq AI enabled")
     else:
-        GEMINI_AVAILABLE = False
-        print("⚠ No GOOGLE_API_KEY found, using pattern-based analysis")
+        GROQ_AVAILABLE = False
+        print("⚠ No GROQ_API_KEY found, using pattern-based analysis")
 except Exception as e:
-    GEMINI_AVAILABLE = False
-    print(f"⚠ Gemini not available: {e}, using pattern-based analysis")
+    GROQ_AVAILABLE = False
+    print(f"⚠ Groq AI not available: {e}, using pattern-based analysis")
 ```
 
 #### Enhanced Functions
@@ -45,8 +44,8 @@ Both functions maintain original pattern-based logic as reliable fallback.
 ### 3. action.yml
 Added new optional input:
 ```yaml
-google_api_key:
-  description: "Google API key for optional AI-powered analysis (uses pattern-based fallback if not provided)"
+groq_api_key:
+  description: "Groq API key for optional AI-powered analysis (uses pattern-based fallback if not provided)"
   required: false
   default: ""
 ```
@@ -54,11 +53,11 @@ google_api_key:
 ### 4. entrypoint.sh
 Added API key handling:
 ```bash
-GOOGLE_API_KEY="${INPUT_GOOGLE_API_KEY:-}"
+GROQ_API_KEY="${INPUT_GROQ_API_KEY:-}"
 
-if [[ -n "$GOOGLE_API_KEY" ]]; then
-    export GOOGLE_API_KEY
-    echo "🤖 AI enhancement enabled (Gemini)"
+if [[ -n "$GROQ_API_KEY" ]]; then
+    export GROQ_API_KEY
+    echo "🤖 AI enhancement enabled (Groq)"
 else
     echo "📊 Using pattern-based analysis (AI disabled)"
 fi
@@ -82,7 +81,7 @@ Scanner → Pattern Analysis → Reports
 
 ### With API Key (Optional)
 ```
-Scanner → AI Analysis (Gemini) → Fallback to Patterns (if error) → Reports
+Scanner → AI Analysis (Groq) → Fallback to Patterns (if error) → Reports
 ✓ Context-aware insights
 ✓ Enhanced recommendations
 ✓ Graceful degradation
@@ -102,7 +101,7 @@ Scanner → AI Analysis (Gemini) → Fallback to Patterns (if error) → Reports
 - uses: Srivatsanalluraya/AI-Security-Scanner3.0@v1
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
-    google_api_key: ${{ secrets.GOOGLE_API_KEY }}
+    groq_api_key: ${{ secrets.GROQ_API_KEY }}
 ```
 
 ## Benefits
@@ -119,10 +118,8 @@ Scanner → AI Analysis (Gemini) → Fallback to Patterns (if error) → Reports
 - More detailed vulnerability insights
 - Still gets pattern analysis as backup
 
-## Free Tier Limits (Google Gemini)
-- **Requests**: 15/minute, 1500/day
-- **Tokens**: 1M/day
-- **Cost**: Free
+## Free Tier Limits
+- Check Groq documentation for current rate limits and pricing information.
 
 ## Testing
 
@@ -140,10 +137,10 @@ Expected: "📊 Using pattern-based analysis (AI disabled)"
 docker run --rm \
   -v $(pwd):/workspace \
   -e GITHUB_TOKEN=your_token \
-  -e GOOGLE_API_KEY=your_key \
+  -e GROQ_API_KEY=your_key \
   security-scanner . your_token
 ```
-Expected: "🤖 AI enhancement enabled (Gemini)"
+Expected: "🤖 AI enhancement enabled (Groq)"
 
 ## Backward Compatibility
 ✅ Existing users see no changes
@@ -160,7 +157,7 @@ Expected: "🤖 AI enhancement enabled (Gemini)"
 5. Update marketplace listing
 
 ## Migration Guide
-No migration needed! Existing users continue working unchanged. To enable AI:
-1. Get API key from https://makersuite.google.com/app/apikey
-2. Add to repo secrets as `GOOGLE_API_KEY`
-3. Add one line to workflow: `google_api_key: ${{ secrets.GOOGLE_API_KEY }}`
+No migration needed for existing installations of the scanner. To enable Groq-based AI enhancement:
+1. Get an API key from Groq (see Groq documentation)
+2. Add to repo secrets as `GROQ_API_KEY`
+3. Add one line to your workflow: `groq_api_key: ${{ secrets.GROQ_API_KEY }}`
