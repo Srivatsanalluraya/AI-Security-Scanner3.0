@@ -30,6 +30,7 @@ permissions:
   contents: read
   pull-requests: write
   security-events: write
+  statuses: write  # Required to set commit status checks
 
 runs:
   using: "docker"
