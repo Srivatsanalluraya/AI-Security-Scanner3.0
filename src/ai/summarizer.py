@@ -13,12 +13,43 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 # Try to import Groq client, fall back gracefully if not available
+# This is intentionally tolerant because different versions of the SDK
+# may export the client under different names or provide a factory.
+GROQ_AVAILABLE = False
+API_KEY = os.getenv("GROQ_API_KEY")
+client = None
 try:
-    from groq import GroqClient
+    import groq
+
+    GroqClient = None
+    # Common export patterns
+    if hasattr(groq, "GroqClient"):
+        GroqClient = groq.GroqClient
+    elif hasattr(groq, "Client"):
+        GroqClient = groq.Client
+    elif hasattr(groq, "client") and hasattr(groq.client, "GroqClient"):
+        GroqClient = groq.client.GroqClient
+    elif hasattr(groq, "create_client"):
+        GroqClient = groq.create_client
+    else:
+        # Try a direct submodule import as a last resort
+        try:
+            from groq.client import GroqClient as _GC
+            GroqClient = _GC
+        except Exception:
+            GroqClient = None
+
+    if GroqClient is None:
+        raise ImportError("Groq client class or factory not found in 'groq' package")
+
     GROQ_AVAILABLE = True
-    API_KEY = os.getenv("GROQ_API_KEY")
     if API_KEY:
-        client = GroqClient(api_key=API_KEY)
+        # Instantiate or call the factory with the API key
+        try:
+            client = GroqClient(api_key=API_KEY)
+        except TypeError:
+            # Some factories may accept different kwarg names
+            client = GroqClient(API_KEY)
         print("✓ Groq AI enabled")
     else:
         GROQ_AVAILABLE = False
