@@ -106,11 +106,14 @@ echo "  📁 Location: security-reports/"
 # ===============================
 # Policy Enforcement
 # ===============================
-POLICY_EXIT_CODE=0
+
 
 echo ""
 echo "▶ Checking security policy..."
 
+POLICY_EXIT_CODE=0
+
+set +e
 
 python - <<EOF
 import json
@@ -133,7 +136,7 @@ EOF
 
 # Capture exit code
 POLICY_EXIT_CODE=$?
-
+set -e
 
 # ===============================
 # PR Comment
