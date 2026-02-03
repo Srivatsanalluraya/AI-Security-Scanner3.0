@@ -67,7 +67,7 @@ python /app/src/reporters/report_builder.py \
   --out "$REPORT_DIR/final_report.json" 2>/dev/null || echo "  ⚠️ Report merge encountered an issue"
 
 echo "Γû╢ Generating AI summaries..."
-python /app/src/ai/summarizer.py 2>/dev/null || echo "  ΓÜá∩╕Å Summarization encountered an issue"
+python /app/src/ai/summarizer.py || echo "  ΓÜá∩╕Å Summarization encountered an issue"
 
 # Display dashboard-style report
 echo ""
