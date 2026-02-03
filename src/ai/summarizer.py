@@ -11,7 +11,7 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, List, Optional
-
+API_KEY = none
 def _init_groq_client():
     """Initialize Groq client if available."""
     global GROQ_AVAILABLE, client, API_KEY
