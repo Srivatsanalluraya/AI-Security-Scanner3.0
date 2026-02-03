@@ -6,7 +6,7 @@ Structured AI summarizer for Bandit, Semgrep, pip-audit results.
 - Produces consistent PR-ready output with Impact and Fix suggestions
 - Optional Groq AI enhancement (falls back to pattern-based if no API key)
 """
- 
+
 import json
 import os
 from pathlib import Path
