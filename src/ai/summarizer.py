@@ -62,7 +62,7 @@ def _groq_generate(prompt: str) -> Optional[str]:
 
     try:
         response = client.chat.completions.create(
-            model="llama3.1-8b-8192",  # ✅ Correct model
+            model="llama3.1-8b-instant",  # ✅ Correct model
             messages=[
                 {"role": "system", "content": "You are a security analysis assistant."},
                 {"role": "user", "content": prompt}
