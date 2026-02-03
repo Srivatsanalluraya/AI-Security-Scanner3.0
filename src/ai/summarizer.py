@@ -13,141 +13,54 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 def _init_groq_client():
-    """Discover and instantiate a Groq client if available.
+    """Initialize Groq client if available."""
+    global GROQ_AVAILABLE, client, API_KEY
 
-    This function is tolerant of different package shapes and avoids
-    raising hard ImportErrors; it returns a tuple (available: bool, client)
-    so tests can mock different package shapes.
-    """
-    global GROQ_AVAILABLE, client
     GROQ_AVAILABLE = False
     client = None
+    API_KEY = os.getenv("GROQ_API_KEY")
 
-    API_KEY_LOCAL = os.getenv("GROQ_API_KEY")
+    if not API_KEY:
+        print("ℹ️ GROQ_API_KEY not found, using pattern-based analysis")
+        return False, None
 
     try:
-        import importlib
-        groq = importlib.import_module("groq")
+        from groq import Groq
 
-        # Try to find a callable factory or client class
-        client_factory = None
-        chosen = None
-
-        # Look for obvious names first
-        for name in ("GroqClient", "Client", "create_client", "client"):
-            if hasattr(groq, name):
-                attr = getattr(groq, name)
-                if callable(attr):
-                    client_factory = attr
-                    chosen = f"groq.{name}"
-                    break
-
-        # Inspect package attributes for candidate factories
-        if client_factory is None:
-            for name in dir(groq):
-                if name.startswith("_"):
-                    continue
-                ln = name.lower()
-                if "client" in ln or name.lower().startswith("create"):
-                    attr = getattr(groq, name)
-                    if callable(attr):
-                        client_factory = attr
-                        chosen = f"groq.{name}"
-                        break
-
-        # Try submodule groq.client
-        if client_factory is None:
-            try:
-                mod = importlib.import_module("groq.client")
-                for name in dir(mod):
-                    if name.startswith("_"):
-                        continue
-                    attr = getattr(mod, name)
-                    if callable(attr) and ("client" in name.lower() or "groq" in name.lower()):
-                        client_factory = attr
-                        chosen = f"groq.client.{name}"
-                        break
-            except Exception:
-                pass
-
-        if client_factory is None:
-            # No factory found — groq package exists but no client exports
-            print("⚠ groq package installed but no client factory found, using pattern-based analysis")
-            return False, None
-
-        # If no API key provided, don't instantiate and keep available flag false
-        if not API_KEY_LOCAL:
-            print("ℹ️ GROQ_API_KEY not found, using pattern-based analysis")
-            GROQ_AVAILABLE = False
-            return False, None
-
-        # Try to instantiate with common signatures
-        creation_err = None
-        try:
-            client_obj = client_factory(api_key=API_KEY_LOCAL)
-        except TypeError:
-            try:
-                client_obj = client_factory(API_KEY_LOCAL)
-            except Exception as e:
-                creation_err = e
-                client_obj = None
-        except Exception as e:
-            creation_err = e
-            client_obj = None
-
-        if client_obj is None:
-            raise ImportError(f"Failed to instantiate Groq client using {chosen}: {creation_err}")
-
-        client = client_obj
+        client = Groq(api_key=API_KEY)
         GROQ_AVAILABLE = True
-        print(f"✓ Groq AI enabled via {chosen}")
+
+        print("✓ Groq AI enabled")
         return True, client
 
     except Exception as e:
-        print(f"⚠ Groq AI enabled")
+        print(f"⚠ Groq AI not available: {e}")
         return False, None
 
-
-# Initialize on import
 _init_groq_client()
 
 
 def _groq_generate(prompt: str) -> Optional[str]:
-    """Attempt to generate text using a Groq client with flexible handling of common return types."""
+    """Generate text using Groq Chat API."""
+    if not GROQ_AVAILABLE or client is None:
+        return None
+
     try:
-        if 'client' not in globals():
-            return None
+        response = client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            messages=[
+                {"role": "system", "content": "You are a security analysis assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=200
+        )
 
-        # Try common client.generate form
-        if hasattr(client, "generate"):
-            r = client.generate(prompt=prompt, model="groq-1")
-            # Try attribute or dict access
-            text = getattr(r, "text", None) or (r.get("text") if isinstance(r, dict) else None)
-            if text:
-                return text.strip()
+        return response.choices[0].message.content.strip()
 
-        # Try client.responses.create (newer patterns)
-        if hasattr(client, "responses") and hasattr(client.responses, "create"):
-            r = client.responses.create(model="groq-1", input=prompt)
-            # dict-like response handling
-            if isinstance(r, dict):
-                if "output_text" in r and r["output_text"]:
-                    return r["output_text"].strip()
-                outputs = r.get("outputs") or []
-                if outputs:
-                    return "".join(o.get("content", "") for o in outputs if isinstance(o, dict)).strip()
-            # attribute-based response handling
-            if hasattr(r, "output_text") and r.output_text:
-                return r.output_text.strip()
-            if hasattr(r, "output") and r.output:
-                out = r.output
-                if isinstance(out, str):
-                    return out.strip()
-                if isinstance(out, list):
-                    return "".join([o.get("content", "") for o in out if isinstance(o, dict)]).strip()
     except Exception as e:
         print(f"⚠ Groq API call failed, using patterns: {e}")
-    return None
+        return None
 
 
 def load_json(path):
