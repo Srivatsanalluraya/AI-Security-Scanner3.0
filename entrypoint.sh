@@ -3,16 +3,22 @@ set -e
 
 echo "🔥 AI Vulnerability Scanner Starting..."
 
+# -------------------------------
+# Inputs
+# -------------------------------
 SCAN_PATH=${1:-"."}
 RAW_TOKEN="$2"
 
 ENFORCE_POLICY="${INPUT_ENFORCE_POLICY:-false}"
 GROQ_API_KEY="${INPUT_GROQ_API_KEY:-}"
 
-# Prefer explicit token argument → fallback to env
+# Prefer explicit token → fallback to env
 GITHUB_TOKEN="${RAW_TOKEN:-$GITHUB_TOKEN}"
 
-# Export API key
+
+# -------------------------------
+# Groq Setup
+# -------------------------------
 if [[ -n "$GROQ_API_KEY" ]]; then
     export GROQ_API_KEY
     echo "🤖 AI enhancement enabled (Groq)"
@@ -21,23 +27,27 @@ else
 fi
 
 
-# Validate GitHub Token
+# -------------------------------
+# Validate Token
+# -------------------------------
 if [[ -z "$GITHUB_TOKEN" ]]; then
     echo "❌ ERROR: GitHub token missing."
     exit 1
 fi
 
 
-# Export scan path for live runner
+# -------------------------------
+# Export Scan Path
+# -------------------------------
 export SCAN_PATH="$SCAN_PATH"
 
 echo "🔍 Scanning path: $SCAN_PATH"
 echo "🔐 Policy enforcement: $ENFORCE_POLICY"
 
 
-# ================================
-# Run In-Memory AI Scanner
-# ================================
+# ===============================
+# Run In-Memory Scanner
+# ===============================
 echo ""
 echo "▶ Running in-memory security + AI analysis..."
 
@@ -47,9 +57,9 @@ python /app/src/ai/live_scanner.py || {
 }
 
 
-# ================================
+# ===============================
 # Artifact Export
-# ================================
+# ===============================
 echo ""
 echo "▶ Saving scan reports..."
 
@@ -59,11 +69,10 @@ ARTIFACTS_DIR="${GITHUB_WORKSPACE}/security-reports"
 mkdir -p "$ARTIFACTS_DIR"
 
 
-# Live runner output
 LIVE_REPORT="security-reports/live_report.json"
 
 
-if [ -f "$LIVE_REPORT" ]; then
+if [[ -f "$LIVE_REPORT" ]]; then
     cp "$LIVE_REPORT" "$ARTIFACTS_DIR/scan-${TIMESTAMP}.json"
     echo "  ✓ scan-${TIMESTAMP}.json"
 else
@@ -71,7 +80,9 @@ else
 fi
 
 
-# Summary markdown
+# -------------------------------
+# Summary Markdown
+# -------------------------------
 cat > "$ARTIFACTS_DIR/summary-${TIMESTAMP}.md" << EOF
 # Security Scan Report
 
@@ -92,16 +103,16 @@ echo "  ✓ summary-${TIMESTAMP}.md"
 echo "  📁 Location: security-reports/"
 
 
-# ================================
+# ===============================
 # Policy Enforcement
-# ================================
+# ===============================
 POLICY_EXIT_CODE=0
 
 echo ""
 echo "▶ Checking security policy..."
 
 
-python - <<EOF || POLICY_EXIT_CODE=\$?
+python - <<EOF
 import json
 from pathlib import Path
 from src.security_policy import SecurityPolicy
@@ -120,9 +131,13 @@ if report.exists():
 EOF
 
 
-# ================================
+# Capture exit code
+POLICY_EXIT_CODE=$?
+
+
+# ===============================
 # PR Comment
-# ================================
+# ===============================
 if [[ -n "$GITHUB_EVENT_PATH" ]]; then
 
     PR_NUMBER=$(jq -r ".pull_request.number // empty" "$GITHUB_EVENT_PATH" 2>/dev/null)
@@ -146,9 +161,9 @@ if [[ -n "$GITHUB_EVENT_PATH" ]]; then
 fi
 
 
-# ================================
+# ===============================
 # Final Status
-# ================================
+# ===============================
 echo ""
 echo "======================================================================"
 
