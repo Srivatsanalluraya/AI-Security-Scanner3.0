@@ -15,7 +15,7 @@ from summarizer import (
 # Run Commands in Memory
 # ----------------------------
 def run_json(cmd: List[str]) -> Dict:
-    """Run tool and capture JSON output"""
+    """Run tool and capture JSON output safely"""
 
     try:
         p = subprocess.run(
@@ -25,11 +25,15 @@ def run_json(cmd: List[str]) -> Dict:
             timeout=300
         )
 
-        if p.returncode != 0:
-            print("⚠ Tool failed:", " ".join(cmd))
+        # Warn only if tool produced NO usable output
+        if p.returncode != 0 and not p.stdout:
+            print("⚠ Tool execution failed:", " ".join(cmd))
             print(p.stderr[:500])
 
-        return json.loads(p.stdout) if p.stdout else {}
+        if not p.stdout:
+            return {}
+
+        return json.loads(p.stdout)
 
     except Exception as e:
         print("⚠ Execution failed:", e)
@@ -43,8 +47,9 @@ def collect_issues(scan_path=".") -> List[Dict]:
 
     issues = []
 
-    # Bandit
+    # ---------------- Bandit ----------------
     print("▶ Bandit")
+
     bandit = run_json([
         "bandit", "-r", scan_path, "-f", "json"
     ])
@@ -58,8 +63,10 @@ def collect_issues(scan_path=".") -> List[Dict]:
             "severity": r.get("issue_severity")
         })
 
-    # Semgrep
+
+    # ---------------- Semgrep ----------------
     print("▶ Semgrep")
+
     semgrep = run_json([
         "semgrep", "--config", "auto", "--json", scan_path
     ])
@@ -73,8 +80,10 @@ def collect_issues(scan_path=".") -> List[Dict]:
             "severity": r.get("extra", {}).get("severity")
         })
 
-    # Pip-audit
+
+    # ---------------- Pip-audit ----------------
     print("▶ Pip-audit")
+
     pip_audit = run_json([
         "pip-audit", "-f", "json"
     ])
@@ -109,7 +118,9 @@ def main():
         print("✅ No issues found")
         return
 
+
     print(f"⚠ Found {len(issues)} issues")
+
 
     report = []
 
@@ -128,13 +139,16 @@ def main():
             "fix": fix
         })
 
-    # Export
+
+    # ---------------- Export ----------------
     os.makedirs("security-reports", exist_ok=True)
 
-    with open("security-reports/live_report.json", "w") as f:
+    output_file = "security-reports/live_report.json"
+
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
-    print("✅ Live AI report saved")
+    print(f"✅ Live AI report saved → {output_file}")
 
 
 if __name__ == "__main__":
