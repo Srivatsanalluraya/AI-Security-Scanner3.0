@@ -82,7 +82,7 @@ jobs:
           fetch-depth: 0  # Full history for proper git operations
       
       - name: Run AI Security Scanner
-        uses: Srivatsanalluraya/AI-Security-Scanner3.0@v1.0.8
+        uses: Srivatsanalluraya/AI-Security-Scanner3.0@v1.0.11
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           enforce_policy: "true"
