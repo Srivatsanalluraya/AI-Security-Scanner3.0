@@ -41,7 +41,7 @@ echo "🔐 Policy enforcement: $ENFORCE_POLICY"
 echo ""
 echo "▶ Running in-memory security + AI analysis..."
 
-python /app/src/ai/live_runner.py || {
+python /app/src/ai/live_scanner.py || {
     echo "❌ Live scan failed"
     exit 1
 }
