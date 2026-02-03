@@ -25,8 +25,9 @@ RUN pip install --no-cache-dir \
     && pip install --no-cache-dir --upgrade groq pytest
 
 # Copy source files
-ARG CACHE_BUST=1
-RUN echo "Cache bust: $CACHE_BUST"
+
+RUN date
+RUN echo "Building image at $(date)"
 COPY src/ /app/src/
 COPY rules/ /app/rules/
 COPY entrypoint.sh /app/entrypoint.sh
