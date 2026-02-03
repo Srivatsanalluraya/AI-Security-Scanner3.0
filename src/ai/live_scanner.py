@@ -141,14 +141,62 @@ def main():
 
 
     # ---------------- Export ----------------
-    os.makedirs("security-reports", exist_ok=True)
+    # ---------------- Export ----------------
 
-    output_file = "security-reports/live_report.json"
+# Ensure dirs exist
+os.makedirs("security-reports", exist_ok=True)
+os.makedirs("reports", exist_ok=True)
 
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(report, f, indent=2)
 
-    print(f"✅ Live AI report saved → {output_file}")
+# 1️⃣ Live report (raw)
+live_file = "security-reports/live_report.json"
+
+with open(live_file, "w", encoding="utf-8") as f:
+    json.dump(report, f, indent=2)
+
+
+# 2️⃣ Legacy detailed report (for dashboard / PR / policy)
+detailed = {
+    "total_issues": len(report),
+    "detailed_issues": []
+}
+
+for item in report:
+    detailed["detailed_issues"].append({
+        "number": item["id"],
+        "source": item["source"],
+        "severity": "MEDIUM",   # You can improve later
+        "file": item["file"],
+        "line": item["line"],
+        "description": item["issue"],
+        "impact": item["impact"],
+        "fix": item["fix"]
+    })
+
+
+issues_file = "reports/issues_detailed.json"
+
+with open(issues_file, "w", encoding="utf-8") as f:
+    json.dump(detailed, f, indent=2)
+
+
+# 3️⃣ Final merged report (simple version)
+final_file = "reports/final_report.json"
+
+with open(final_file, "w", encoding="utf-8") as f:
+    json.dump({
+        "summary": {
+            "total_issues": len(report)
+        },
+        "issues": report
+    }, f, indent=2)
+
+
+print("✅ Reports generated:")
+print("  →", live_file)
+print("  →", issues_file)
+print("  →", final_file)
+
 
 
 if __name__ == "__main__":
