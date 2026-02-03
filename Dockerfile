@@ -3,7 +3,7 @@ FROM python:3.12-slim
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH="/app"
-ARG CACHE_BUST=1
+
 
 # Install system dependencies + Node.js
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -25,7 +25,8 @@ RUN pip install --no-cache-dir \
     && pip install --no-cache-dir --upgrade groq pytest
 
 # Copy source files
-ARG CACHE_BUST
+ARG CACHE_BUST=1
+RUN echo "Cache bust: $CACHE_BUST"
 COPY src/ /app/src/
 COPY rules/ /app/rules/
 COPY entrypoint.sh /app/entrypoint.sh
