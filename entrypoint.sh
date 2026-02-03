@@ -6,7 +6,7 @@ echo "🔥 AI Vulnerability Scanner Starting..."
 SCAN_PATH=${1:-"."}
 RAW_TOKEN="$2"
 ENFORCE_POLICY="${INPUT_ENFORCE_POLICY:-false}"
-GROQ_API_KEY="${INPUT_GROQ_API_KEY:-}"
+GROQ_API_KEY="${GROQ_API_KEY:-}"
 
 # Prefer explicit token argument → fallback to env
 GITHUB_TOKEN="${RAW_TOKEN:-$GITHUB_TOKEN}"
