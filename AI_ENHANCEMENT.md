@@ -21,11 +21,11 @@ Enhanced with optional Groq AI:
 #### Import Block (Lines 16-32)
 ```python
 try:
-    from groq import GroqClient
+    from groq import Groq
     GROQ_AVAILABLE = True
     API_KEY = os.getenv("GROQ_API_KEY")
     if API_KEY:
-        client = GroqClient(api_key=API_KEY)
+        client = Groq(api_key=API_KEY)
         print("✓ Groq AI enabled")
     else:
         GROQ_AVAILABLE = False
