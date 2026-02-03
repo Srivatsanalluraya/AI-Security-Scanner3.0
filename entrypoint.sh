@@ -153,7 +153,7 @@ if [[ -n "$GITHUB_EVENT_PATH" ]]; then
         COMMIT_SHA=$(jq -r ".pull_request.head.sha // empty" "$GITHUB_EVENT_PATH")
 
         python /app/src/reporters/pr_commenter.py \
-            --report "security-reports/live_report.json" \
+            --report "reports/issues_detailed.json" \
             --repo "$GITHUB_REPOSITORY" \
             --pr "$PR_NUMBER" \
             --token "$GITHUB_TOKEN" \
