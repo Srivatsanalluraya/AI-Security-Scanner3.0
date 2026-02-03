@@ -122,6 +122,7 @@ def main():
     print(f"⚠ Found {len(issues)} issues")
 
 
+    # ---------------- Build AI Report ----------------
     report = []
 
     for i, issue in enumerate(issues, 1):
@@ -141,61 +142,61 @@ def main():
 
 
     # ---------------- Export ----------------
-    # ---------------- Export ----------------
 
-# Ensure dirs exist
-os.makedirs("security-reports", exist_ok=True)
-os.makedirs("reports", exist_ok=True)
-
-
-# 1️⃣ Live report (raw)
-live_file = "security-reports/live_report.json"
-
-with open(live_file, "w", encoding="utf-8") as f:
-    json.dump(report, f, indent=2)
+    # Ensure dirs exist
+    os.makedirs("security-reports", exist_ok=True)
+    os.makedirs("reports", exist_ok=True)
 
 
-# 2️⃣ Legacy detailed report (for dashboard / PR / policy)
-detailed = {
-    "total_issues": len(report),
-    "detailed_issues": []
-}
+    # 1️⃣ Live report
+    live_file = "security-reports/live_report.json"
 
-for item in report:
-    detailed["detailed_issues"].append({
-        "number": item["id"],
-        "source": item["source"],
-        "severity": "MEDIUM",   # You can improve later
-        "file": item["file"],
-        "line": item["line"],
-        "description": item["issue"],
-        "impact": item["impact"],
-        "fix": item["fix"]
-    })
+    with open(live_file, "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
 
 
-issues_file = "reports/issues_detailed.json"
+    # 2️⃣ Legacy detailed report
+    detailed = {
+        "total_issues": len(report),
+        "detailed_issues": []
+    }
 
-with open(issues_file, "w", encoding="utf-8") as f:
-    json.dump(detailed, f, indent=2)
+    for item in report:
+        detailed["detailed_issues"].append({
+            "number": item["id"],
+            "source": item["source"],
+            "severity": "MEDIUM",
+            "file": item["file"],
+            "line": item["line"],
+            "description": item["issue"],
+            "impact": item["impact"],
+            "fix": item["fix"]
+        })
 
 
-# 3️⃣ Final merged report (simple version)
-final_file = "reports/final_report.json"
+    issues_file = "reports/issues_detailed.json"
 
-with open(final_file, "w", encoding="utf-8") as f:
-    json.dump({
-        "summary": {
-            "total_issues": len(report)
-        },
-        "issues": report
-    }, f, indent=2)
+    with open(issues_file, "w", encoding="utf-8") as f:
+        json.dump(detailed, f, indent=2)
 
 
-print("✅ Reports generated:")
-print("  →", live_file)
-print("  →", issues_file)
-print("  →", final_file)
+    # 3️⃣ Final merged report
+    final_file = "reports/final_report.json"
+
+    with open(final_file, "w", encoding="utf-8") as f:
+        json.dump({
+            "summary": {
+                "total_issues": len(report)
+            },
+            "issues": report
+        }, f, indent=2)
+
+
+    print("✅ Reports generated:")
+    print("  →", live_file)
+    print("  →", issues_file)
+    print("  →", final_file)
+
 
 
 
