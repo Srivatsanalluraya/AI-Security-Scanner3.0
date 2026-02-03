@@ -35,8 +35,7 @@ permissions:
 runs:
   using: "docker"
   image: "Dockerfile"
-  env:
-      CACHE_BUST: ${{ github.run_id }}
+ 
 
   args:
     - ${{ inputs.scan_path }}
