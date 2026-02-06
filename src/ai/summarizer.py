@@ -2,85 +2,63 @@
 """
 Structured AI summarizer for Bandit, Semgrep, pip-audit results.
 - Extracts each issue
-- Summarizes issue, consequence, fix separately
-- Produces consistent PR-ready output
-- Optional Groq AI enhancement
+- Uses secure backend AI
+- Generates summary + detailed reports
 """
 
 import json
 import os
+import requests
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# Global variables
-GROQ_AVAILABLE = False
-client = None
-API_KEY = None
+
+# ===============================
+# Backend Configuration
+# ===============================
+
+BACKEND_URL = os.getenv(
+    "AI_BACKEND_URL",
+    " https://ai-security-backend.onrender.com"   # 🔴 Replace with your URL
+)
+
+AI_ENABLED = True
 
 
-# -------------------------------
-# Initialize Groq Client
-# -------------------------------
-def _init_groq_client():
-    """Initialize Groq client if available."""
-    global GROQ_AVAILABLE, client, API_KEY
+# ===============================
+# AI Backend Call
+# ===============================
 
-    GROQ_AVAILABLE = False
-    client = None
-    API_KEY = os.getenv("GROQ_API_KEY")
+def _ai_generate(prompt: str) -> Optional[str]:
+    """Send prompt to secure backend"""
 
-    if not API_KEY:
-        print("ℹ️ GROQ_API_KEY not found, using pattern-based analysis")
-        return False, None
-
-    try:
-        from groq import Groq
-
-        client = Groq(api_key=API_KEY)
-        GROQ_AVAILABLE = True
-
-        print("✓ Groq AI enabled")
-        return True, client
-
-    except Exception as e:
-        print(f"⚠ Groq AI not available: {e}")
-        return False, None
-
-
-# Initialize on load
-_init_groq_client()
-
-
-# -------------------------------
-# Groq Generation
-# -------------------------------
-def _groq_generate(prompt: str) -> Optional[str]:
-    """Generate text using Groq Chat API."""
-
-    if not GROQ_AVAILABLE or client is None:
+    if not AI_ENABLED:
         return None
 
     try:
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",  # ✅ Correct model
-            messages=[
-                {"role": "system", "content": "You are a security analysis assistant."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
-            max_tokens=200
+        r = requests.post(
+            BACKEND_URL,
+            json={"prompt": prompt},
+            timeout=40
         )
 
-        return response.choices[0].message.content.strip()
+        if r.status_code != 200:
+            print("⚠ AI backend error:", r.text)
+            return None
+
+        data = r.json()
+
+        return data["choices"][0]["message"]["content"].strip()
 
     except Exception as e:
-        print(f"⚠ Groq API call failed, using patterns: {e}")
+        print("⚠ AI backend failed:", e)
         return None
 
 
-# -------------------------------
+# ===============================
 # Utilities
-# -------------------------------
+# ===============================
+
 def load_json(path):
     if not Path(path).exists():
         return None
@@ -92,7 +70,6 @@ def load_json(path):
 
 
 def extract_severity_level(severity_str: str) -> str:
-    """Normalize severity levels."""
 
     if not severity_str:
         return "MEDIUM"
@@ -107,20 +84,20 @@ def extract_severity_level(severity_str: str) -> str:
         return "LOW"
 
 
-# -------------------------------
+# ===============================
 # AI / Pattern Logic
-# -------------------------------
+# ===============================
+
 def generate_impact_statement(issue: Dict) -> str:
-    """Generate impact statement."""
 
     source = issue.get("source", "Unknown")
     severity = extract_severity_level(issue.get("severity", "MEDIUM"))
     issue_text = str(issue.get("issue", ""))
 
-    # Try AI first
-    if GROQ_AVAILABLE and API_KEY:
-        try:
-            prompt = f"""
+    # Try AI
+    try:
+
+        prompt = f"""
 Analyze this security issue in 1 sentence (max 100 chars):
 
 Issue: {issue_text[:200]}
@@ -131,19 +108,19 @@ Format:
 [{severity}] Brief impact - consequence
 """
 
-            response_text = _groq_generate(prompt)
+        response = _ai_generate(prompt)
 
-            if response_text:
-                return response_text[:200]
+        if response:
+            return response[:200]
 
-        except Exception as e:
-            print(f"⚠ Groq failed, fallback: {e}")
+    except Exception as e:
+        print("⚠ AI impact failed:", e)
 
-    # Fallback rules
+    # Fallback
     issue_lower = issue_text.lower()
 
     if any(x in issue_lower for x in ["sql", "injection", "command"]):
-        return f"[{severity}] Injection risk - Arbitrary code execution possible"
+        return f"[{severity}] Injection risk - Code execution possible"
 
     elif any(x in issue_lower for x in ["hardcoded", "password", "secret", "key", "token"]):
         return f"[{severity}] Credential exposure - Sensitive data leak"
@@ -152,78 +129,78 @@ Format:
         return f"[{severity}] Unsafe deserialization - RCE possible"
 
     elif any(x in issue_lower for x in ["eval", "exec"]):
-        return f"[{severity}] Unsafe code execution - Arbitrary execution"
+        return f"[{severity}] Unsafe code execution"
 
     elif any(x in issue_lower for x in ["authentication", "authorization"]):
-        return f"[{severity}] Access control issue - Unauthorized access"
+        return f"[{severity}] Access control weakness"
 
     elif any(x in issue_lower for x in ["crypto", "encryption", "hash"]):
-        return f"[{severity}] Weak cryptography - Data exposure"
+        return f"[{severity}] Weak cryptography"
 
     elif "cve" in issue_lower:
-        return f"[{severity}] Known vulnerability - Patch required"
+        return f"[{severity}] Known vulnerability"
 
     else:
-        return f"[{severity}] Security issue detected by {source}"
+        return f"[{severity}] Security issue from {source}"
 
 
 def generate_fix_suggestion(issue: Dict) -> str:
-    """Generate fix suggestion."""
 
     issue_text = str(issue.get("issue", ""))
     source = issue.get("source", "Unknown")
 
-    # Try AI first
-    if GROQ_AVAILABLE and API_KEY:
-        try:
-            prompt = f"""
-Suggest 1 fix (max 100 chars):
+    # Try AI
+    try:
+
+        prompt = f"""
+Suggest 1 specific fix (max 100 chars):
 
 Issue: {issue_text[:200]}
 Source: {source}
 """
 
-            response_text = _groq_generate(prompt)
+        response = _ai_generate(prompt)
 
-            if response_text:
-                return response_text[:250]
+        if response:
+            return response[:250]
 
-        except Exception as e:
-            print(f"⚠ Groq failed, fallback: {e}")
+    except Exception as e:
+        print("⚠ AI fix failed:", e)
 
-    # Fallback rules
+    # Fallback
     issue_lower = issue_text.lower()
 
     if "sql" in issue_lower:
-        return "Use parameterized queries"
+        return "Use prepared statements"
 
     elif "hardcoded" in issue_lower:
-        return "Move secrets to environment variables"
+        return "Move secrets to env variables"
 
     elif "pickle" in issue_lower:
-        return "Use safe serialization formats"
+        return "Use safe serialization"
 
     elif "eval" in issue_lower:
         return "Avoid eval/exec"
 
     elif "crypto" in issue_lower:
-        return "Use modern cryptography"
+        return "Use modern algorithms"
 
     elif source == "pip-audit":
         return issue.get("fix", "Update dependency")
 
     else:
-        return "Follow security best practices"
+        return "Follow secure coding practices"
 
 
-# -------------------------------
+# ===============================
 # Extract Issues
-# -------------------------------
+# ===============================
+
 def extract_all_issues(report_dir) -> List[Dict]:
 
     issues = []
 
-    # Bandit
+    # -------- Bandit --------
     bandit = load_json(f"{report_dir}/bandit-report.json")
 
     if bandit and "results" in bandit:
@@ -237,7 +214,8 @@ def extract_all_issues(report_dir) -> List[Dict]:
                 "confidence": r.get("issue_confidence")
             })
 
-    # Semgrep
+
+    # -------- Semgrep --------
     semgrep = load_json(f"{report_dir}/semgrep-report.json")
 
     if semgrep and "results" in semgrep:
@@ -252,14 +230,17 @@ def extract_all_issues(report_dir) -> List[Dict]:
                 ),
             })
 
-    # Pip-audit
+
+    # -------- pip-audit --------
     pip_audit = load_json(f"{report_dir}/pip-audit-report.json")
 
     if pip_audit:
+
         deps = pip_audit if isinstance(pip_audit, list) else pip_audit.get("dependencies", [])
 
         for dep in deps:
             for vuln in dep.get("vulns", []):
+
                 issues.append({
                     "source": "pip-audit",
                     "package": dep.get("name"),
@@ -274,13 +255,14 @@ def extract_all_issues(report_dir) -> List[Dict]:
     return issues
 
 
-# -------------------------------
+# ===============================
 # Reports
-# -------------------------------
+# ===============================
+
 def generate_final_summary(issues: List[Dict]) -> str:
 
     if not issues:
-        return "⚠️ No issues extracted. Check scanner reports.\n"
+        return "⚠️ No issues extracted\n"
 
     lines = []
 
@@ -326,9 +308,10 @@ def generate_detailed_report(issues: List[Dict]) -> Dict:
     return report
 
 
-# -------------------------------
+# ===============================
 # Main
-# -------------------------------
+# ===============================
+
 def main():
 
     report_dir = "reports"
@@ -339,6 +322,7 @@ def main():
     issues = extract_all_issues(report_dir)
 
     if not issues:
+
         print("⚠️ No issues found in reports")
 
         Path(f"{report_dir}/summary.txt").write_text(
@@ -351,6 +335,7 @@ def main():
 
         return
 
+
     summary = generate_final_summary(issues)
 
     Path(f"{report_dir}/summary.txt").write_text(
@@ -358,12 +343,14 @@ def main():
         encoding="utf-8"
     )
 
+
     detailed = generate_detailed_report(issues)
 
     Path(f"{report_dir}/issues_detailed.json").write_text(
         json.dumps(detailed, indent=2),
         encoding="utf-8"
     )
+
 
     print("✅ Summary written to reports/summary.txt")
     print("✅ Detailed report written to reports/issues_detailed.json")
