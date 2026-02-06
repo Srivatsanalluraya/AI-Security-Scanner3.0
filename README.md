@@ -76,26 +76,55 @@ on:
 jobs:
   security-scan:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      # ============================
+      # Checkout Repository
+      # ============================
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for proper git operations
-      
+          fetch-depth: 0
+
+
+      # ============================
+      # Run AI Security Scanner
+      # ============================
       - name: Run AI Security Scanner
-        uses: Srivatsanalluraya/AI-Security-Scanner3.0@v1.0.11
+        uses: Srivatsanalluraya/AI-Security-Scanner3.0@v1.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           enforce_policy: "true"
-          groq_api_key: ${{ secrets.GROQ_API_KEY }}  # Optional: Enable AI enhancements
-      
+        env:
+          # 🔐 Secure AI Backend (Render)
+          AI_BACKEND_URL:  https://ai-security-backend.onrender.com/analyze
+
+
+      # ============================
+      # Commit Generated Reports
+      # ============================
       - name: Commit scan reports
         if: always()
         run: |
+
+          echo "📦 Committing security reports..."
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Ensure directory exists
+          mkdir -p security-reports
+
+          # Stage reports
           git add security-reports/ || true
-          git commit -m "📊 Security scan [skip ci]" || echo "No changes to commit"
-          git push || echo "Push failed or no changes"
+
+          # Commit if changed
+          git diff --cached --quiet || \
+            git commit -m "📊 Automated security scan report [skip ci]"
+
+          # Push safely
+          git push || echo "⚠ Push skipped (PR / no permission / no changes)"
+
 ```
 
 That's it! Push and the scanner runs automatically.
