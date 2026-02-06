@@ -19,7 +19,7 @@ from typing import Dict, List, Optional
 
 BACKEND_URL = os.getenv(
     "AI_BACKEND_URL",
-    " https://ai-security-backend.onrender.com/analyze"   # 🔴 Replace with your URL
+    "https://ai-security-backend.onrender.com/analyze"   # 🔴 Replace with your URL
 )
 
 AI_ENABLED = True
