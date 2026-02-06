@@ -19,10 +19,14 @@ from typing import Dict, List, Optional
 
 BACKEND_URL = os.getenv(
     "AI_BACKEND_URL",
-    "https://ai-security-backend.onrender.com/analyze"   # 🔴 Replace with your URL
+    "https://ai-security-backend.onrender.com/analyze"  # ✅ FIXED (no space)
 )
 
 AI_ENABLED = True
+
+# Connection tuning
+TIMEOUT = 25
+RETRIES = 2
 
 
 # ===============================
@@ -30,29 +34,41 @@ AI_ENABLED = True
 # ===============================
 
 def _ai_generate(prompt: str) -> Optional[str]:
-    """Send prompt to secure backend"""
+    """Send prompt to secure backend with retry"""
 
     if not AI_ENABLED:
         return None
 
-    try:
-        r = requests.post(
-            BACKEND_URL,
-            json={"prompt": prompt},
-            timeout=40
-        )
+    for attempt in range(RETRIES):
 
-        if r.status_code != 200:
-            print("⚠ AI backend error:", r.text)
+        try:
+            r = requests.post(
+                BACKEND_URL,
+                json={"prompt": prompt},
+                timeout=TIMEOUT
+            )
+
+            if r.status_code != 200:
+                print("⚠ AI backend HTTP error:", r.status_code, r.text[:200])
+                continue
+
+            data = r.json()
+
+            # ✅ Correct Groq format
+            if "choices" in data and data["choices"]:
+                return data["choices"][0]["message"]["content"].strip()
+
+            print("⚠ AI backend returned unexpected format:", data)
             return None
 
-        data = r.json()
+        except requests.exceptions.Timeout:
+            print(f"⚠ AI backend timeout (attempt {attempt+1}/{RETRIES})")
 
-        return data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            print("⚠ AI backend failed:", e)
 
-    except Exception as e:
-        print("⚠ AI backend failed:", e)
-        return None
+    print("⚠ AI backend unavailable, falling back to rules")
+    return None
 
 
 # ===============================
@@ -94,10 +110,8 @@ def generate_impact_statement(issue: Dict) -> str:
     severity = extract_severity_level(issue.get("severity", "MEDIUM"))
     issue_text = str(issue.get("issue", ""))
 
-    # Try AI
-    try:
-
-        prompt = f"""
+    # ---- Try AI ----
+    prompt = f"""
 Analyze this security issue in 1 sentence (max 100 chars):
 
 Issue: {issue_text[:200]}
@@ -108,15 +122,12 @@ Format:
 [{severity}] Brief impact - consequence
 """
 
-        response = _ai_generate(prompt)
+    response = _ai_generate(prompt)
 
-        if response:
-            return response[:200]
+    if response:
+        return response[:200]
 
-    except Exception as e:
-        print("⚠ AI impact failed:", e)
-
-    # Fallback
+    # ---- Fallback ----
     issue_lower = issue_text.lower()
 
     if any(x in issue_lower for x in ["sql", "injection", "command"]):
@@ -149,25 +160,20 @@ def generate_fix_suggestion(issue: Dict) -> str:
     issue_text = str(issue.get("issue", ""))
     source = issue.get("source", "Unknown")
 
-    # Try AI
-    try:
-
-        prompt = f"""
+    # ---- Try AI ----
+    prompt = f"""
 Suggest 1 specific fix (max 100 chars):
 
 Issue: {issue_text[:200]}
 Source: {source}
 """
 
-        response = _ai_generate(prompt)
+    response = _ai_generate(prompt)
 
-        if response:
-            return response[:250]
+    if response:
+        return response[:250]
 
-    except Exception as e:
-        print("⚠ AI fix failed:", e)
-
-    # Fallback
+    # ---- Fallback ----
     issue_lower = issue_text.lower()
 
     if "sql" in issue_lower:
@@ -214,7 +220,6 @@ def extract_all_issues(report_dir) -> List[Dict]:
                 "confidence": r.get("issue_confidence")
             })
 
-
     # -------- Semgrep --------
     semgrep = load_json(f"{report_dir}/semgrep-report.json")
 
@@ -229,7 +234,6 @@ def extract_all_issues(report_dir) -> List[Dict]:
                     r.get("extra", {}).get("severity")
                 ),
             })
-
 
     # -------- pip-audit --------
     pip_audit = load_json(f"{report_dir}/pip-audit-report.json")
