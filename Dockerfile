@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir \
     pip-audit==2.7.3 \
     safety \
     requests \
-    && pip install --no-cache-dir --upgrade groq pytest
+    && pip install --no-cache-dir --upgrade pytest
 
 # Copy source files
 
