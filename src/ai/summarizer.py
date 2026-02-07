@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Structured AI summarizer for Bandit, Semgrep, pip-audit results.
-- Extracts each issue
+Structured AI summarizer (Optimized + Batched)
+- Extracts issues
 - Uses secure backend AI
+- Batches AI calls to avoid rate limits
 - Generates summary + detailed reports
 """
 
@@ -19,14 +20,16 @@ from typing import Dict, List, Optional
 
 BACKEND_URL = os.getenv(
     "AI_BACKEND_URL",
-    "https://ai-security-backend.onrender.com/analyze"  # ✅ FIXED (no space)
+    "https://ai-security-backend.onrender.com/analyze"
 )
 
 AI_ENABLED = True
 
-# Connection tuning
 TIMEOUT = 25
 RETRIES = 2
+
+# Limit batch size (prevents token overflow)
+MAX_AI_ISSUES = int(os.getenv("AI_MAX_ISSUES", 30))
 
 
 # ===============================
@@ -34,7 +37,6 @@ RETRIES = 2
 # ===============================
 
 def _ai_generate(prompt: str) -> Optional[str]:
-    """Send prompt to secure backend with retry"""
 
     if not AI_ENABLED:
         return None
@@ -49,26 +51,85 @@ def _ai_generate(prompt: str) -> Optional[str]:
             )
 
             if r.status_code != 200:
-                print("⚠ AI backend HTTP error:", r.status_code, r.text[:200])
+                print("⚠ AI backend HTTP error:", r.status_code)
                 continue
 
             data = r.json()
 
-            # ✅ Correct Groq format
             if "choices" in data and data["choices"]:
                 return data["choices"][0]["message"]["content"].strip()
 
-            print("⚠ AI backend returned unexpected format:", data)
+            print("⚠ AI backend returned unexpected format")
             return None
 
         except requests.exceptions.Timeout:
-            print(f"⚠ AI backend timeout (attempt {attempt+1}/{RETRIES})")
+            print(f"⚠ AI timeout ({attempt+1}/{RETRIES})")
 
         except Exception as e:
             print("⚠ AI backend failed:", e)
 
-    print("⚠ AI backend unavailable, falling back to rules")
+    print("⚠ AI backend unavailable, fallback mode")
     return None
+
+
+# ===============================
+# Batch AI Analyzer (NEW)
+# ===============================
+
+def batch_ai_analysis(issues: List[Dict]) -> Dict[str, Dict]:
+    """
+    Analyze multiple issues in ONE AI call.
+    Returns:
+        { "1": {"impact": "...", "fix": "..."}, ... }
+    """
+
+    if not AI_ENABLED or not issues:
+        return {}
+
+    limited = issues[:MAX_AI_ISSUES]
+
+    blocks = []
+
+    for i, issue in enumerate(limited, 1):
+
+        blocks.append(
+            f"{i}. [{issue.get('severity')}] "
+            f"{issue.get('source')} - {issue.get('issue')}"
+        )
+
+    joined = "\n".join(blocks)
+
+    prompt = f"""
+You are a cybersecurity expert.
+
+Analyze the following vulnerabilities.
+
+For EACH item, provide:
+- Impact (1 sentence)
+- Fix (1 sentence)
+
+Return STRICT JSON only:
+
+{{
+  "1": {{"impact": "...", "fix": "..."}},
+  "2": {{"impact": "...", "fix": "..."}}
+}}
+
+Vulnerabilities:
+{joined}
+"""
+
+    response = _ai_generate(prompt)
+
+    if not response:
+        return {}
+
+    try:
+        return json.loads(response)
+
+    except Exception as e:
+        print("⚠ Batch AI parse failed:", e)
+        return {}
 
 
 # ===============================
@@ -76,12 +137,13 @@ def _ai_generate(prompt: str) -> Optional[str]:
 # ===============================
 
 def load_json(path):
+
     if not Path(path).exists():
         return None
 
     try:
         return json.loads(Path(path).read_text(encoding="utf-8"))
-    except Exception:
+    except:
         return None
 
 
@@ -94,108 +156,54 @@ def extract_severity_level(severity_str: str) -> str:
 
     if any(x in sev for x in ["HIGH", "CRITICAL", "ERROR"]):
         return "HIGH"
+
     elif any(x in sev for x in ["MEDIUM", "WARNING"]):
         return "MEDIUM"
-    else:
-        return "LOW"
+
+    return "LOW"
 
 
 # ===============================
-# AI / Pattern Logic
+# Fallback Rules
 # ===============================
 
-def generate_impact_statement(issue: Dict) -> str:
+def fallback_impact(issue: Dict) -> str:
 
-    source = issue.get("source", "Unknown")
-    severity = extract_severity_level(issue.get("severity", "MEDIUM"))
-    issue_text = str(issue.get("issue", ""))
+    sev = extract_severity_level(issue.get("severity"))
+    txt = str(issue.get("issue", "")).lower()
 
-    # ---- Try AI ----
-    prompt = f"""
-Analyze this security issue in 1 sentence (max 100 chars):
+    if "sql" in txt:
+        return f"[{sev}] SQL injection risk"
 
-Issue: {issue_text[:200]}
-Severity: {severity}
-Source: {source}
+    if "password" in txt or "secret" in txt:
+        return f"[{sev}] Credential exposure"
 
-Format:
-[{severity}] Brief impact - consequence
-"""
+    if "eval" in txt:
+        return f"[{sev}] Arbitrary code execution"
 
-    response = _ai_generate(prompt)
+    if "crypto" in txt:
+        return f"[{sev}] Weak cryptography"
 
-    if response:
-        return response[:200]
-
-    # ---- Fallback ----
-    issue_lower = issue_text.lower()
-
-    if any(x in issue_lower for x in ["sql", "injection", "command"]):
-        return f"[{severity}] Injection risk - Code execution possible"
-
-    elif any(x in issue_lower for x in ["hardcoded", "password", "secret", "key", "token"]):
-        return f"[{severity}] Credential exposure - Sensitive data leak"
-
-    elif any(x in issue_lower for x in ["pickle", "deserial"]):
-        return f"[{severity}] Unsafe deserialization - RCE possible"
-
-    elif any(x in issue_lower for x in ["eval", "exec"]):
-        return f"[{severity}] Unsafe code execution"
-
-    elif any(x in issue_lower for x in ["authentication", "authorization"]):
-        return f"[{severity}] Access control weakness"
-
-    elif any(x in issue_lower for x in ["crypto", "encryption", "hash"]):
-        return f"[{severity}] Weak cryptography"
-
-    elif "cve" in issue_lower:
-        return f"[{severity}] Known vulnerability"
-
-    else:
-        return f"[{severity}] Security issue from {source}"
+    return f"[{sev}] Security issue detected"
 
 
-def generate_fix_suggestion(issue: Dict) -> str:
+def fallback_fix(issue: Dict) -> str:
 
-    issue_text = str(issue.get("issue", ""))
-    source = issue.get("source", "Unknown")
+    txt = str(issue.get("issue", "")).lower()
 
-    # ---- Try AI ----
-    prompt = f"""
-Suggest 1 specific fix (max 100 chars):
-
-Issue: {issue_text[:200]}
-Source: {source}
-"""
-
-    response = _ai_generate(prompt)
-
-    if response:
-        return response[:250]
-
-    # ---- Fallback ----
-    issue_lower = issue_text.lower()
-
-    if "sql" in issue_lower:
+    if "sql" in txt:
         return "Use prepared statements"
 
-    elif "hardcoded" in issue_lower:
-        return "Move secrets to env variables"
+    if "password" in txt:
+        return "Move secrets to env vars"
 
-    elif "pickle" in issue_lower:
-        return "Use safe serialization"
+    if "eval" in txt:
+        return "Remove eval/exec"
 
-    elif "eval" in issue_lower:
-        return "Avoid eval/exec"
+    if "crypto" in txt:
+        return "Use modern crypto"
 
-    elif "crypto" in issue_lower:
-        return "Use modern algorithms"
-
-    elif source == "pip-audit":
-        return issue.get("fix", "Update dependency")
-
-    else:
-        return "Follow secure coding practices"
+    return "Follow secure coding practices"
 
 
 # ===============================
@@ -206,25 +214,31 @@ def extract_all_issues(report_dir) -> List[Dict]:
 
     issues = []
 
-    # -------- Bandit --------
+    # Bandit
     bandit = load_json(f"{report_dir}/bandit-report.json")
 
     if bandit and "results" in bandit:
+
         for r in bandit["results"]:
+
             issues.append({
                 "source": "Bandit",
                 "file": r.get("filename"),
                 "line": r.get("line_number"),
                 "issue": r.get("issue_text"),
-                "severity": extract_severity_level(r.get("issue_severity")),
-                "confidence": r.get("issue_confidence")
+                "severity": extract_severity_level(
+                    r.get("issue_severity")
+                )
             })
 
-    # -------- Semgrep --------
+
+    # Semgrep
     semgrep = load_json(f"{report_dir}/semgrep-report.json")
 
     if semgrep and "results" in semgrep:
+
         for r in semgrep["results"]:
+
             issues.append({
                 "source": "Semgrep",
                 "file": r.get("path"),
@@ -232,10 +246,11 @@ def extract_all_issues(report_dir) -> List[Dict]:
                 "issue": r.get("extra", {}).get("message"),
                 "severity": extract_severity_level(
                     r.get("extra", {}).get("severity")
-                ),
+                )
             })
 
-    # -------- pip-audit --------
+
+    # pip-audit
     pip_audit = load_json(f"{report_dir}/pip-audit-report.json")
 
     if pip_audit:
@@ -243,15 +258,14 @@ def extract_all_issues(report_dir) -> List[Dict]:
         deps = pip_audit if isinstance(pip_audit, list) else pip_audit.get("dependencies", [])
 
         for dep in deps:
-            for vuln in dep.get("vulns", []):
+
+            for v in dep.get("vulns", []):
 
                 issues.append({
                     "source": "pip-audit",
-                    "package": dep.get("name"),
-                    "version": dep.get("version"),
                     "file": "requirements.txt",
                     "line": 0,
-                    "issue": f"{vuln.get('id')} - {vuln.get('description')}",
+                    "issue": f"{v.get('id')} - {v.get('description')}",
                     "severity": "MEDIUM",
                     "fix": f"Update {dep.get('name')}"
                 })
@@ -263,7 +277,35 @@ def extract_all_issues(report_dir) -> List[Dict]:
 # Reports
 # ===============================
 
-def generate_final_summary(issues: List[Dict]) -> str:
+def generate_detailed_report(issues: List[Dict], ai_map: Dict) -> Dict:
+
+    report = {
+        "total_issues": len(issues),
+        "detailed_issues": []
+    }
+
+    for i, issue in enumerate(issues, 1):
+
+        ai = ai_map.get(str(i), {})
+
+        impact = ai.get("impact") or fallback_impact(issue)
+        fix = ai.get("fix") or fallback_fix(issue)
+
+        report["detailed_issues"].append({
+            "number": i,
+            "source": issue.get("source"),
+            "severity": issue.get("severity"),
+            "file": issue.get("file"),
+            "line": issue.get("line"),
+            "description": issue.get("issue"),
+            "impact": impact,
+            "fix": fix
+        })
+
+    return report
+
+
+def generate_summary(issues: List[Dict], ai_map: Dict) -> str:
 
     if not issues:
         return "⚠️ No issues extracted\n"
@@ -275,41 +317,19 @@ def generate_final_summary(issues: List[Dict]) -> str:
 
     for i, issue in enumerate(issues, 1):
 
+        ai = ai_map.get(str(i), {})
+
+        impact = ai.get("impact") or fallback_impact(issue)
+        fix = ai.get("fix") or fallback_fix(issue)
+
+        desc = issue.get("issue", "")[:100]
+
         lines.append(f"Issue #{i}:")
-
-        desc = issue.get("issue", "No description")
-
-        if len(desc) > 100:
-            desc = desc[:97] + "..."
-
         lines.append(f"  Description: {desc}")
-        lines.append(f"  Impact: {generate_impact_statement(issue)}")
-        lines.append(f"  Fix: {issue.get('fix') or generate_fix_suggestion(issue)}\n")
+        lines.append(f"  Impact: {impact}")
+        lines.append(f"  Fix: {fix}\n")
 
     return "\n".join(lines)
-
-
-def generate_detailed_report(issues: List[Dict]) -> Dict:
-
-    report = {
-        "total_issues": len(issues),
-        "detailed_issues": []
-    }
-
-    for i, issue in enumerate(issues, 1):
-
-        report["detailed_issues"].append({
-            "number": i,
-            "source": issue.get("source"),
-            "severity": issue.get("severity"),
-            "file": issue.get("file"),
-            "line": issue.get("line"),
-            "description": issue.get("issue"),
-            "impact": generate_impact_statement(issue),
-            "fix": issue.get("fix") or generate_fix_suggestion(issue)
-        })
-
-    return report
 
 
 # ===============================
@@ -321,18 +341,14 @@ def main():
     report_dir = "reports"
 
     print("📂 Reading reports from:", report_dir)
-    print("📄 Files:", list(Path(report_dir).glob("*")))
 
     issues = extract_all_issues(report_dir)
 
     if not issues:
 
-        print("⚠️ No issues found in reports")
+        print("⚠ No issues found")
 
-        Path(f"{report_dir}/summary.txt").write_text(
-            "⚠️ No issues extracted.\n"
-        )
-
+        Path(f"{report_dir}/summary.txt").write_text("No issues\n")
         Path(f"{report_dir}/issues_detailed.json").write_text(
             json.dumps({"total_issues": 0}, indent=2)
         )
@@ -340,24 +356,34 @@ def main():
         return
 
 
-    summary = generate_final_summary(issues)
+    # ---------------------------
+    # Batch AI (KEY CHANGE)
+    # ---------------------------
 
-    Path(f"{report_dir}/summary.txt").write_text(
-        summary,
-        encoding="utf-8"
-    )
+    print(f"🤖 Running batch AI on {min(len(issues), MAX_AI_ISSUES)} issues...")
+
+    ai_map = batch_ai_analysis(issues)
 
 
-    detailed = generate_detailed_report(issues)
+    # ---------------------------
+    # Generate Reports
+    # ---------------------------
+
+    summary = generate_summary(issues, ai_map)
+
+    detailed = generate_detailed_report(issues, ai_map)
+
+
+    Path(f"{report_dir}/summary.txt").write_text(summary)
 
     Path(f"{report_dir}/issues_detailed.json").write_text(
-        json.dumps(detailed, indent=2),
-        encoding="utf-8"
+        json.dumps(detailed, indent=2)
     )
 
 
-    print("✅ Summary written to reports/summary.txt")
-    print("✅ Detailed report written to reports/issues_detailed.json")
+    print("✅ Summary written")
+    print("✅ Detailed report written")
+    print("🚀 AI calls used: 1 (batched)")
 
 
 if __name__ == "__main__":
