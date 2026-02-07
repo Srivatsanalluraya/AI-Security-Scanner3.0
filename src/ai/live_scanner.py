@@ -6,8 +6,9 @@ import os
 from typing import List, Dict
 
 from summarizer import (
-    generate_impact_statement,
-    generate_fix_suggestion,
+    batch_ai_analysis,
+    fallback_impact,
+    fallback_fix,
     extract_severity_level
 )
 
@@ -25,7 +26,6 @@ def run_json(cmd: List[str]) -> Dict:
             timeout=300
         )
 
-        # Warn only if tool produced NO JSON
         if p.returncode != 0 and not p.stdout:
             print("⚠ Tool execution failed:", " ".join(cmd))
             print(p.stderr[:500])
@@ -41,11 +41,12 @@ def run_json(cmd: List[str]) -> Dict:
 
 
 # -------------------------------------------------
-# Collect vulnerabilities from tools (in-memory)
+# Collect vulnerabilities
 # -------------------------------------------------
 def collect_issues(scan_path=".") -> List[Dict]:
 
     issues = []
+
 
     # ---------------- Bandit ----------------
     print("▶ Bandit")
@@ -74,6 +75,7 @@ def collect_issues(scan_path=".") -> List[Dict]:
     ])
 
     for r in semgrep.get("results", []):
+
         sev = r.get("extra", {}).get("severity", "MEDIUM")
 
         issues.append({
@@ -119,7 +121,7 @@ def main():
     print("🔍 Scanning:", scan_path)
 
 
-    # ----------- Collect Raw Issues -----------
+    # -------- Collect Issues --------
     issues = collect_issues(scan_path)
 
     if not issues:
@@ -130,13 +132,21 @@ def main():
     print(f"⚠ Found {len(issues)} issues")
 
 
-    # ----------- Build AI-Enhanced Report -----------
+    # -------- Batch AI Analysis --------
+    print("🤖 Running batched AI analysis...")
+
+    ai_map = batch_ai_analysis(issues)
+
+
+    # -------- Build Report --------
     report = []
 
     for i, issue in enumerate(issues, 1):
 
-        impact = generate_impact_statement(issue)
-        fix = generate_fix_suggestion(issue)
+        ai = ai_map.get(str(i), {})
+
+        impact = ai.get("impact") or fallback_impact(issue)
+        fix = ai.get("fix") or fallback_fix(issue)
 
         report.append({
             "id": i,
@@ -150,7 +160,7 @@ def main():
         })
 
 
-    # ----------- Compute Analytics -----------
+    # -------- Analytics --------
     severity_counts = {}
     issues_by_source = {}
 
@@ -163,19 +173,19 @@ def main():
         issues_by_source[src] = issues_by_source.get(src, 0) + 1
 
 
-    # ----------- Ensure Output Dirs -----------
+    # -------- Output Dirs --------
     os.makedirs("security-reports", exist_ok=True)
     os.makedirs("reports", exist_ok=True)
 
 
-    # ----------- 1. Live Raw Report -----------
+    # -------- Live Report --------
     live_file = "security-reports/live_report.json"
 
     with open(live_file, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
 
-    # ----------- 2. Legacy Detailed Report -----------
+    # -------- Detailed Report --------
     detailed = {
         "total_issues": len(report),
         "severity_counts": severity_counts,
@@ -204,7 +214,7 @@ def main():
         json.dump(detailed, f, indent=2)
 
 
-    # ----------- 3. Final Merged Report -----------
+    # -------- Final Report --------
     final_file = "reports/final_report.json"
 
     with open(final_file, "w", encoding="utf-8") as f:
@@ -218,7 +228,7 @@ def main():
         }, f, indent=2)
 
 
-    # ----------- Status -----------
+    # -------- Status --------
     print("✅ Reports generated successfully:")
     print("  →", live_file)
     print("  →", issues_file)
@@ -226,7 +236,7 @@ def main():
 
 
 # -------------------------------------------------
-# Entry Point
+# Entry
 # -------------------------------------------------
 if __name__ == "__main__":
     main()
