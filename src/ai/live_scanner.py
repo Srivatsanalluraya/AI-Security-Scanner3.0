@@ -102,19 +102,15 @@ def collect_issues(scan_path=".") -> List[Dict]:
     # ---------------- Semgrep (Strong Multi-Lang) ----------------
     print("▶ Semgrep (JS / TS / Java / Go / Python / Secrets)")
 
-    semgrep = run_json([
+   semgrep = run_json([
 
-       "semgrep",
+    "semgrep", "scan",
 
-    # Force scan everything
-    "--no-git-ignore",
-    "--no-ignore",
-    "--no-skip-unknown-extensions",
-
-    # Show what is scanned
+    "--disable-version-check",
+    "--metrics=off",
     "--verbose",
 
-    # Language packs
+    # Language rules
     "--config", "p/javascript.security",
     "--config", "p/javascript.lang.correctness",
     "--config", "p/typescript.security",
@@ -124,8 +120,9 @@ def collect_issues(scan_path=".") -> List[Dict]:
     "--config", "p/generic.secrets",
 
     "--json",
+
     scan_path
-    ])
+])
 
 
     for r in semgrep.get("results", []):
