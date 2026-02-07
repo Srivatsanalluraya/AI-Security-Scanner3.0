@@ -104,26 +104,27 @@ def collect_issues(scan_path=".") -> List[Dict]:
 
     semgrep = run_json([
 
-        "semgrep",
+       "semgrep",
 
-        # JavaScript / React / TypeScript
-        "--config", "p/javascript.security",
-        "--config", "p/javascript.lang.correctness",
+    # Force scan everything
+    "--no-git-ignore",
+    "--no-ignore",
+    "--no-skip-unknown-extensions",
 
-        # Python
-        "--config", "p/python.security",
+    # Show what is scanned
+    "--verbose",
 
-        # Java
-        "--config", "p/java.security",
+    # Language packs
+    "--config", "p/javascript.security",
+    "--config", "p/javascript.lang.correctness",
+    "--config", "p/typescript.security",
+    "--config", "p/python.security",
+    "--config", "p/java.security",
+    "--config", "p/golang.security",
+    "--config", "p/generic.secrets",
 
-        # Go
-        "--config", "p/golang.security",
-
-        # Secrets
-        "--config", "p/generic.secrets",
-
-        "--json",
-        scan_path
+    "--json",
+    scan_path
     ])
 
 
