@@ -11,6 +11,38 @@ from summarizer import (
     fallback_fix,
     extract_severity_level
 )
+# -------------------------------------------------
+# Collect All Scannable Source Files
+# -------------------------------------------------
+def collect_all_files(scan_path="."):
+
+    exts = (
+        ".py",
+        ".js", ".jsx", ".ts", ".tsx",
+        ".java",
+        ".go",
+        ".php",
+        ".rb",
+        ".c", ".cpp",
+        ".cs"
+    )
+
+    scanned = []
+
+    for root, _, files in os.walk(scan_path):
+
+        # Skip hidden/system dirs
+        if any(x in root for x in [".git", "node_modules", ".venv", "dist", "build"]):
+            continue
+
+        for f in files:
+
+            if f.lower().endswith(exts):
+
+                full = os.path.join(root, f)
+                scanned.append(full.replace(scan_path, "").lstrip("/"))
+
+    return sorted(scanned)
 
 
 # =================================================
@@ -194,7 +226,14 @@ def main():
     scan_path = os.getenv("SCAN_PATH", ".")
 
     print("🔍 Scanning:", scan_path)
+    print("📁 Collecting scannable files...")
 
+    all_files = collect_all_files(scan_path)
+
+    print(f"📊 Total files scanned: {len(all_files)}")
+
+    for f in all_files:
+        print("   •", f)
 
     # ---------- Collect Issues ----------
     issues = collect_issues(scan_path)
@@ -251,6 +290,10 @@ def main():
     # ---------- Output Dirs ----------
     os.makedirs("security-reports", exist_ok=True)
     os.makedirs("reports", exist_ok=True)
+    # ---------- Save Scanned Files ----------
+    with  open("reports/scanned_files.txt", "w", encoding="utf-8") as f:
+        for file in all_files:
+            f.write(file + "\n")
 
 
     # ---------- Live Report ----------
