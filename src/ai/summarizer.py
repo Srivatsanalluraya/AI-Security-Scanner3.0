@@ -12,7 +12,7 @@ import os
 import requests
 from pathlib import Path
 from typing import Dict, List, Optional
-
+import re
 
 # ===============================
 # Backend Configuration
@@ -75,61 +75,84 @@ def _ai_generate(prompt: str) -> Optional[str]:
 # ===============================
 # Batch AI Analyzer (NEW)
 # ===============================
+import re
 
-def batch_ai_analysis(issues: List[Dict]) -> Dict[str, Dict]:
+
+def _safe_json_extract(text: str):
     """
-    Analyze multiple issues in ONE AI call.
-    Returns:
-        { "1": {"impact": "...", "fix": "..."}, ... }
+    Extract valid JSON object from AI response safely
+    """
+
+    if not text:
+        return None
+
+    # Remove markdown ``` blocks
+    text = re.sub(r"```.*?```", "", text, flags=re.S)
+
+    # Find first {...} block
+    match = re.search(r"\{.*\}", text, re.S)
+
+    if not match:
+        return None
+
+    json_text = match.group(0)
+
+    try:
+        return json.loads(json_text)
+    except Exception:
+        return None
+
+def batch_ai_analysis(issues: List[Dict]) -> Dict:
+    """
+    Send all issues in ONE request to AI and parse safely
     """
 
     if not AI_ENABLED or not issues:
         return {}
 
-    limited = issues[:MAX_AI_ISSUES]
+    prompt = """
+You are a security analysis assistant.
 
-    blocks = []
+For each issue below, generate:
 
-    for i, issue in enumerate(limited, 1):
+- impact: 1 sentence (max 100 chars)
+- fix: 1 sentence (max 100 chars)
 
-        blocks.append(
-            f"{i}. [{issue.get('severity')}] "
-            f"{issue.get('source')} - {issue.get('issue')}"
-        )
+Return ONLY valid JSON in this format:
 
-    joined = "\n".join(blocks)
+{
+  "1": {"impact": "...", "fix": "..."},
+  "2": {"impact": "...", "fix": "..."}
+}
 
-    prompt = f"""
-You are a cybersecurity expert.
+Issues:
+"""
 
-Analyze the following vulnerabilities.
+    for i, issue in enumerate(issues, 1):
 
-For EACH item, provide:
-- Impact (1 sentence)
-- Fix (1 sentence)
-
-Return STRICT JSON only:
-
-{{
-  "1": {{"impact": "...", "fix": "..."}},
-  "2": {{"impact": "...", "fix": "..."}}
-}}
-
-Vulnerabilities:
-{joined}
+        prompt += f"""
+{i}.
+Source: {issue['source']}
+Severity: {issue.get('severity')}
+File: {issue.get('file')}
+Issue: {issue.get('issue')}
 """
 
     response = _ai_generate(prompt)
 
     if not response:
+        print("⚠ Batch AI returned empty")
         return {}
 
-    try:
-        return json.loads(response)
+    data = _safe_json_extract(response)
 
-    except Exception as e:
-        print("⚠ Batch AI parse failed:", e)
+    if not data:
+        print("⚠ Batch AI parse failed")
+        print("🔎 Raw response preview:")
+        print(response[:400])
         return {}
+
+    return data
 
 
 # ===============================
