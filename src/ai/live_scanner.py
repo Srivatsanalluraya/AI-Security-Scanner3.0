@@ -11,9 +11,11 @@ from summarizer import (
     fallback_fix,
     extract_severity_level
 )
-# -------------------------------------------------
+
+
+# =================================================
 # Collect All Scannable Source Files
-# -------------------------------------------------
+# =================================================
 def collect_all_files(scan_path="."):
 
     exts = (
@@ -31,7 +33,6 @@ def collect_all_files(scan_path="."):
 
     for root, _, files in os.walk(scan_path):
 
-        # Skip hidden/system dirs
         if any(x in root for x in [".git", "node_modules", ".venv", "dist", "build"]):
             continue
 
@@ -46,7 +47,30 @@ def collect_all_files(scan_path="."):
 
 
 # =================================================
-# Run external tools and safely parse JSON output
+# Helpers
+# =================================================
+def has_python_project(path="."):
+
+    for root, _, files in os.walk(path):
+        for f in files:
+            if f.endswith(".py"):
+                return True
+
+    if os.path.exists("requirements.txt"):
+        return True
+
+    if os.path.exists("pyproject.toml"):
+        return True
+
+    return False
+
+
+def has_node_project():
+    return os.path.exists("package.json")
+
+
+# =================================================
+# Run external tools safely
 # =================================================
 def run_json(cmd: List[str]) -> Dict:
 
@@ -60,7 +84,7 @@ def run_json(cmd: List[str]) -> Dict:
 
         if p.returncode != 0 and not p.stdout:
             print("⚠ Tool failed:", " ".join(cmd))
-            print(p.stderr[:500])
+            print(p.stderr[:400])
 
         if not p.stdout:
             return {}
@@ -73,44 +97,48 @@ def run_json(cmd: List[str]) -> Dict:
 
 
 # =================================================
-# Collect vulnerabilities (Multi-Language)
+# Collect Vulnerabilities
 # =================================================
 def collect_issues(scan_path=".") -> List[Dict]:
 
     issues = []
 
 
-    # ---------------- Python (Bandit) ----------------
-    print("▶ Bandit (Python)")
+    # ---------------- Bandit (Python) ----------------
+    if has_python_project(scan_path):
 
-    bandit = run_json([
-        "bandit", "-r", scan_path, "-f", "json"
-    ])
+        print("▶ Bandit (Python)")
 
-    for r in bandit.get("results", []):
-        issues.append({
-            "source": "Bandit",
-            "issue": r.get("issue_text"),
-            "file": r.get("filename"),
-            "line": r.get("line_number"),
-            "severity": extract_severity_level(
-                r.get("issue_severity", "MEDIUM")
-            )
-        })
+        bandit = run_json([
+            "bandit", "-r", scan_path, "-f", "json"
+        ])
+
+        for r in bandit.get("results", []):
+
+            issues.append({
+                "source": "Bandit",
+                "issue": r.get("issue_text"),
+                "file": r.get("filename"),
+                "line": r.get("line_number"),
+                "severity": extract_severity_level(
+                    r.get("issue_severity", "MEDIUM")
+                )
+            })
+
+    else:
+        print("⏭ Skipping Bandit (no Python found)")
 
 
-    # ---------------- Semgrep (Strong Multi-Lang) ----------------
+    # ---------------- Semgrep (Multi-Lang) ----------------
     print("▶ Semgrep (JS / TS / Java / Go / Python / Secrets)")
 
     semgrep = run_json([
 
-        "semgrep", "scan",
+        "semgrep",
 
         "--disable-version-check",
         "--metrics=off",
-        "--verbose",
 
-        # Language rules
         "--config", "p/javascript.security",
         "--config", "p/javascript.lang.correctness",
         "--config", "p/typescript.security",
@@ -120,9 +148,8 @@ def collect_issues(scan_path=".") -> List[Dict]:
         "--config", "p/generic.secrets",
 
         "--json",
-
-         scan_path
-])
+        scan_path
+    ])
 
 
     for r in semgrep.get("results", []):
@@ -138,29 +165,34 @@ def collect_issues(scan_path=".") -> List[Dict]:
         })
 
 
-    # ---------------- Python Dependencies ----------------
-    print("▶ Pip-audit (Python deps)")
+    # ---------------- pip-audit (Python deps) ----------------
+    if has_python_project(scan_path):
 
-    pip_audit = run_json([
-        "pip-audit", "-f", "json"
-    ])
+        print("▶ Pip-audit (Python deps)")
 
-    deps = pip_audit if isinstance(pip_audit, list) else pip_audit.get("dependencies", [])
+        pip_audit = run_json([
+            "pip-audit", "-f", "json"
+        ])
 
-    for dep in deps:
-        for v in dep.get("vulns", []):
+        deps = pip_audit if isinstance(pip_audit, list) else pip_audit.get("dependencies", [])
 
-            issues.append({
-                "source": "pip-audit",
-                "issue": v.get("description"),
-                "file": "requirements.txt",
-                "line": 0,
-                "severity": "HIGH"
-            })
+        for dep in deps:
+            for v in dep.get("vulns", []):
+
+                issues.append({
+                    "source": "pip-audit",
+                    "issue": v.get("description"),
+                    "file": "requirements.txt",
+                    "line": 0,
+                    "severity": "HIGH"
+                })
+
+    else:
+        print("⏭ Skipping pip-audit (no Python deps)")
 
 
-    # ---------------- Node Dependencies ----------------
-    if os.path.exists("package.json"):
+    # ---------------- npm audit (Node deps) ----------------
+    if has_node_project():
 
         print("▶ npm audit (JS deps)")
 
@@ -182,9 +214,12 @@ def collect_issues(scan_path=".") -> List[Dict]:
                 "severity": extract_severity_level(severity)
             })
 
+    else:
+        print("⏭ Skipping npm audit (no package.json)")
 
-    # ---------------- RetireJS (JS libs) ----------------
-    if os.path.exists("package.json"):
+
+    # ---------------- RetireJS ----------------
+    if has_node_project():
 
         print("▶ RetireJS (JS libraries)")
 
@@ -212,6 +247,9 @@ def collect_issues(scan_path=".") -> List[Dict]:
                             )
                         })
 
+    else:
+        print("⏭ Skipping RetireJS (no Node project)")
+
 
     return issues
 
@@ -233,18 +271,18 @@ def main():
     for f in all_files:
         print("   •", f)
 
+
     # ---------- Collect Issues ----------
     issues = collect_issues(scan_path)
 
     if not issues:
         print("✅ No issues found")
-        return
 
 
     print(f"⚠ Found {len(issues)} issues")
 
 
-    # ---------- Batch AI Analysis ----------
+    # ---------- Batch AI ----------
     print("🤖 Running batched AI analysis...")
 
     ai_map = batch_ai_analysis(issues)
@@ -285,23 +323,25 @@ def main():
         issues_by_source[src] = issues_by_source.get(src, 0) + 1
 
 
-    # ---------- Output Dirs ----------
+    # ---------- Output ----------
     os.makedirs("security-reports", exist_ok=True)
     os.makedirs("reports", exist_ok=True)
-    # ---------- Save Scanned Files ----------
-    with  open("reports/scanned_files.txt", "w", encoding="utf-8") as f:
+
+
+    # Save scanned files
+    with open("reports/scanned_files.txt", "w", encoding="utf-8") as f:
         for file in all_files:
             f.write(file + "\n")
 
 
-    # ---------- Live Report ----------
+    # Live report
     live_file = "security-reports/live_report.json"
 
     with open(live_file, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
 
-    # ---------- Detailed Report ----------
+    # Detailed report
     detailed = {
         "total_issues": len(report),
         "severity_counts": severity_counts,
@@ -330,7 +370,7 @@ def main():
         json.dump(detailed, f, indent=2)
 
 
-    # ---------- Final Report ----------
+    # Final report
     final_file = "reports/final_report.json"
 
     with open(final_file, "w", encoding="utf-8") as f:
