@@ -13,9 +13,9 @@ from summarizer import (
 )
 
 
-# -------------------------------------------------
+# =================================================
 # Run external tools and safely parse JSON output
-# -------------------------------------------------
+# =================================================
 def run_json(cmd: List[str]) -> Dict:
 
     try:
@@ -23,11 +23,11 @@ def run_json(cmd: List[str]) -> Dict:
             cmd,
             capture_output=True,
             text=True,
-            timeout=300
+            timeout=600
         )
 
         if p.returncode != 0 and not p.stdout:
-            print("⚠ Tool execution failed:", " ".join(cmd))
+            print("⚠ Tool failed:", " ".join(cmd))
             print(p.stderr[:500])
 
         if not p.stdout:
@@ -40,16 +40,16 @@ def run_json(cmd: List[str]) -> Dict:
         return {}
 
 
-# -------------------------------------------------
-# Collect vulnerabilities
-# -------------------------------------------------
+# =================================================
+# Collect vulnerabilities (Multi-Language)
+# =================================================
 def collect_issues(scan_path=".") -> List[Dict]:
 
     issues = []
 
 
-    # ---------------- Bandit ----------------
-    print("▶ Bandit")
+    # ---------------- Python (Bandit) ----------------
+    print("▶ Bandit (Python)")
 
     bandit = run_json([
         "bandit", "-r", scan_path, "-f", "json"
@@ -67,12 +67,33 @@ def collect_issues(scan_path=".") -> List[Dict]:
         })
 
 
-    # ---------------- Semgrep ----------------
-    print("▶ Semgrep")
+    # ---------------- Semgrep (Strong Multi-Lang) ----------------
+    print("▶ Semgrep (JS / TS / Java / Go / Python / Secrets)")
 
     semgrep = run_json([
-        "semgrep", "--config", "auto", "--json", scan_path
+
+        "semgrep",
+
+        # JavaScript / React / TypeScript
+        "--config", "p/javascript.security",
+        "--config", "p/javascript.lang.correctness",
+
+        # Python
+        "--config", "p/python.security",
+
+        # Java
+        "--config", "p/java.security",
+
+        # Go
+        "--config", "p/golang.security",
+
+        # Secrets
+        "--config", "p/generic.secrets",
+
+        "--json",
+        scan_path
     ])
+
 
     for r in semgrep.get("results", []):
 
@@ -87,8 +108,8 @@ def collect_issues(scan_path=".") -> List[Dict]:
         })
 
 
-    # ---------------- Pip-audit ----------------
-    print("▶ Pip-audit")
+    # ---------------- Python Dependencies ----------------
+    print("▶ Pip-audit (Python deps)")
 
     pip_audit = run_json([
         "pip-audit", "-f", "json"
@@ -108,12 +129,66 @@ def collect_issues(scan_path=".") -> List[Dict]:
             })
 
 
+    # ---------------- Node Dependencies ----------------
+    if os.path.exists("package.json"):
+
+        print("▶ npm audit (JS deps)")
+
+        npm_audit = run_json([
+            "npm", "audit", "--json"
+        ])
+
+        vulns = npm_audit.get("vulnerabilities", {})
+
+        for name, data in vulns.items():
+
+            severity = data.get("severity", "medium").upper()
+
+            issues.append({
+                "source": "npm-audit",
+                "issue": data.get("title", "Dependency vulnerability"),
+                "file": "package.json",
+                "line": 0,
+                "severity": extract_severity_level(severity)
+            })
+
+
+    # ---------------- RetireJS (JS libs) ----------------
+    if os.path.exists("package.json"):
+
+        print("▶ RetireJS (JS libraries)")
+
+        retire = run_json([
+            "retire",
+            "--js",
+            "--outputformat", "json"
+        ])
+
+        if isinstance(retire, list):
+
+            for result in retire:
+
+                for r in result.get("results", []):
+
+                    for vuln in r.get("vulnerabilities", []):
+
+                        issues.append({
+                            "source": "RetireJS",
+                            "issue": vuln.get("info", ["Outdated library"])[0],
+                            "file": result.get("file", "JS"),
+                            "line": 0,
+                            "severity": extract_severity_level(
+                                vuln.get("severity", "medium")
+                            )
+                        })
+
+
     return issues
 
 
-# -------------------------------------------------
+# =================================================
 # Main Pipeline
-# -------------------------------------------------
+# =================================================
 def main():
 
     scan_path = os.getenv("SCAN_PATH", ".")
@@ -121,7 +196,7 @@ def main():
     print("🔍 Scanning:", scan_path)
 
 
-    # -------- Collect Issues --------
+    # ---------- Collect Issues ----------
     issues = collect_issues(scan_path)
 
     if not issues:
@@ -132,13 +207,13 @@ def main():
     print(f"⚠ Found {len(issues)} issues")
 
 
-    # -------- Batch AI Analysis --------
+    # ---------- Batch AI Analysis ----------
     print("🤖 Running batched AI analysis...")
 
     ai_map = batch_ai_analysis(issues)
 
 
-    # -------- Build Report --------
+    # ---------- Build Report ----------
     report = []
 
     for i, issue in enumerate(issues, 1):
@@ -160,7 +235,7 @@ def main():
         })
 
 
-    # -------- Analytics --------
+    # ---------- Analytics ----------
     severity_counts = {}
     issues_by_source = {}
 
@@ -173,19 +248,19 @@ def main():
         issues_by_source[src] = issues_by_source.get(src, 0) + 1
 
 
-    # -------- Output Dirs --------
+    # ---------- Output Dirs ----------
     os.makedirs("security-reports", exist_ok=True)
     os.makedirs("reports", exist_ok=True)
 
 
-    # -------- Live Report --------
+    # ---------- Live Report ----------
     live_file = "security-reports/live_report.json"
 
     with open(live_file, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
 
-    # -------- Detailed Report --------
+    # ---------- Detailed Report ----------
     detailed = {
         "total_issues": len(report),
         "severity_counts": severity_counts,
@@ -214,7 +289,7 @@ def main():
         json.dump(detailed, f, indent=2)
 
 
-    # -------- Final Report --------
+    # ---------- Final Report ----------
     final_file = "reports/final_report.json"
 
     with open(final_file, "w", encoding="utf-8") as f:
@@ -228,15 +303,15 @@ def main():
         }, f, indent=2)
 
 
-    # -------- Status --------
+    # ---------- Status ----------
     print("✅ Reports generated successfully:")
     print("  →", live_file)
     print("  →", issues_file)
     print("  →", final_file)
 
 
-# -------------------------------------------------
+# =================================================
 # Entry
-# -------------------------------------------------
+# =================================================
 if __name__ == "__main__":
     main()
