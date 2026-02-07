@@ -75,7 +75,10 @@ def _ai_generate(prompt: str) -> Optional[str]:
 # ===============================
 # Batch AI Analyzer (NEW)
 # ===============================
-import re
+def chunked(iterable, size):
+    for i in range(0, len(iterable), size):
+        yield iterable[i:i + size]
+
 
 
 def _safe_json_extract(text: str):
@@ -104,17 +107,23 @@ def _safe_json_extract(text: str):
 
 def batch_ai_analysis(issues: List[Dict]) -> Dict:
     """
-    Send all issues in ONE request to AI and parse safely
+    Chunked batch AI analysis (production safe)
     """
 
     if not AI_ENABLED or not issues:
         return {}
 
-    prompt = """
+    final_results = {}
+    CHUNK_SIZE = 5   # 🔴 critical: keep small
+
+    issue_index = 1
+
+    for chunk in chunked(issues, CHUNK_SIZE):
+
+        prompt = """
 You are a security analysis assistant.
 
 For each issue below, generate:
-
 - impact: 1 sentence (max 100 chars)
 - fix: 1 sentence (max 100 chars)
 
@@ -128,31 +137,41 @@ Return ONLY valid JSON in this format:
 Issues:
 """
 
-    for i, issue in enumerate(issues, 1):
+        local_map = {}
 
-        prompt += f"""
-{i}.
-Source: {issue['source']}
+        for issue in chunk:
+            local_map[str(issue_index)] = issue
+            prompt += f"""
+{issue_index}.
+Source: {issue.get('source')}
 Severity: {issue.get('severity')}
 File: {issue.get('file')}
 Issue: {issue.get('issue')}
 """
+            issue_index += 1
 
-    response = _ai_generate(prompt)
+        response = _ai_generate(prompt)
 
-    if not response:
-        print("⚠ Batch AI returned empty")
-        return {}
+        if not response:
+            print("⚠ AI returned empty chunk, skipping")
+            continue
 
-    data = _safe_json_extract(response)
+        data = _safe_json_extract(response)
 
-    if not data:
-        print("⚠ Batch AI parse failed")
-        print("🔎 Raw response preview:")
-        print(response[:400])
-        return {}
+        if not data:
+            print("⚠ Batch AI parse failed for chunk")
+            continue
 
-    return data
+        # Merge chunk results
+        for k, v in data.items():
+            final_results[k] = v
+
+    if final_results:
+        print(f"✓ AI batch processed {len(final_results)} issues")
+    else:
+        print("⚠ AI unavailable, using rule-based analysis")
+
+    return final_results
 
 
 # ===============================
