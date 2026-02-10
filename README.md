@@ -91,7 +91,7 @@ jobs:
       # Run AI Security Scanner
       # ============================
       - name: Run AI Security Scanner
-        uses: Srivatsanalluraya/AI-Security-Scanner3.0@v1.1.0
+        uses: Srivatsanalluraya/AI-Security-Scanner3.0@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           enforce_policy: "true"
