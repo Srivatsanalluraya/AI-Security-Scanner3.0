@@ -141,7 +141,7 @@ def collect_issues(scan_path=".") -> List[Dict]:
         "semgrep",
         "scan",
         "--disable-version-check",
-        "--metrics=off",
+        
 
         "--config","auto",
 
@@ -190,7 +190,7 @@ def collect_issues(scan_path=".") -> List[Dict]:
 
 
     # ---------------- npm audit (Node deps) ----------------
-    if has_node_project(scan):
+    if has_node_project(scan_path):
 
         print("▶ npm audit (JS deps)")
 
