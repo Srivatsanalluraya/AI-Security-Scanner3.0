@@ -65,8 +65,12 @@ def has_python_project(path="."):
     return False
 
 
-def has_node_project():
-    return os.path.exists("package.json")
+def has_node_project(path="."):
+    for root,_, files in os.walk(path):
+        if "package.json in files:
+            return True
+    return False
+    
 
 
 # =================================================
@@ -135,17 +139,11 @@ def collect_issues(scan_path=".") -> List[Dict]:
     semgrep = run_json([
 
         "semgrep",
-
+        "scan",
         "--disable-version-check",
         "--metrics=off",
 
-        "--config", "p/javascript.security",
-        "--config", "p/javascript.lang.correctness",
-        "--config", "p/typescript.security",
-        "--config", "p/python.security",
-        "--config", "p/java.security",
-        "--config", "p/golang.security",
-        "--config", "p/generic.secrets",
+        "--config","auto",
 
         "--json",
         scan_path
@@ -192,7 +190,7 @@ def collect_issues(scan_path=".") -> List[Dict]:
 
 
     # ---------------- npm audit (Node deps) ----------------
-    if has_node_project():
+    if has_node_project(scan):
 
         print("▶ npm audit (JS deps)")
 
@@ -219,7 +217,7 @@ def collect_issues(scan_path=".") -> List[Dict]:
 
 
     # ---------------- RetireJS ----------------
-    if has_node_project():
+    if has_node_project(scan_path):
 
         print("▶ RetireJS (JS libraries)")
 
@@ -260,8 +258,10 @@ def collect_issues(scan_path=".") -> List[Dict]:
 def main():
 
     scan_path = os.getenv("SCAN_PATH", ".")
+    os.chdir(scan_path)
+    scan_path = "."
 
-    print("🔍 Scanning:", scan_path)
+    print("🔍 Scanning:", os.getcwd())
     print("📁 Collecting scannable files...")
 
     all_files = collect_all_files(scan_path)
