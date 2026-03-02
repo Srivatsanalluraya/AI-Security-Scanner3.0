@@ -67,7 +67,7 @@ def has_python_project(path="."):
 
 def has_node_project(path="."):
     for root,_, files in os.walk(path):
-        if package.json in files:
+        if "package.json" in files:
             return True
     return False
     
