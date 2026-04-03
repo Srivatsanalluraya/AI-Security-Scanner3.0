@@ -150,7 +150,7 @@ set -e
 echo ""
 echo "▶ Generating console report..."
 python /app/src/reporters/dashboard.py \
-  --report "reports/issues_detailed.json" \
+  --report-dir "${GITHUB_WORKSPACE}/reports" \
   2>/dev/null || echo "⚠ Dashboard display failed"
 
 
