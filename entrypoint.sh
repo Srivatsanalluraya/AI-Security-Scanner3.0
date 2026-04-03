@@ -144,6 +144,15 @@ POLICY_EXIT_CODE=$?
 
 set -e
 
+# ===============================
+# Console Dashboard (always runs)
+# ===============================
+echo ""
+echo "▶ Generating console report..."
+python /app/src/reporters/dashboard.py \
+  --report "reports/issues_detailed.json" \
+  2>/dev/null || echo "⚠ Dashboard display failed"
+
 
 # ===============================
 # PR Comment
