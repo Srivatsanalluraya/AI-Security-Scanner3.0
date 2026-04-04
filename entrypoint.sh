@@ -45,6 +45,14 @@ export SCAN_PATH="$SCAN_PATH"
 echo "🔍 Scanning path: $SCAN_PATH"
 echo "🔐 Policy enforcement: $ENFORCE_POLICY"
 
+# ===============================
+# Warm Up Scanner
+# ===============================
+
+echo "🔥 Warming up AI backend..."
+curl -s --max-time 60 "$AI_BACKEND_URL" > /dev/null 2>&1 || true
+sleep 5
+
 
 # ===============================
 # Run In-Memory Scanner
