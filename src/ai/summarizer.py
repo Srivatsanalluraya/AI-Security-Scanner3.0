@@ -25,8 +25,8 @@ BACKEND_URL = os.getenv(
 
 AI_ENABLED = True
 
-TIMEOUT = 25
-RETRIES = 2
+TIMEOUT = 90
+RETRIES = 3
 
 # Limit batch size (prevents token overflow)
 MAX_AI_ISSUES = int(os.getenv("AI_MAX_ISSUES", 30))
