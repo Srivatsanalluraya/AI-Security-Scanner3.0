@@ -87,9 +87,29 @@ jobs:
 
 
       # ============================
+      # Check if Repo has Files  ✅ NEW
+      # ============================
+      - name: Check if repository has files
+        id: repo_check
+        run: |
+          FILE_COUNT=$(find . -type f \
+            ! -path "./.git/*" \
+            ! -path "./.github/*" | wc -l)
+
+          echo "File count: $FILE_COUNT"
+
+          if [ "$FILE_COUNT" -eq 0 ]; then
+            echo "empty=true" >> $GITHUB_OUTPUT
+          else
+            echo "empty=false" >> $GITHUB_OUTPUT
+          fi
+
+
+      # ============================
       # Run AI Security Scanner
       # ============================
       - name: Run AI Security Scanner
+        if: steps.repo_check.outputs.empty == 'false'   # ✅ MODIFIED
         uses: Srivatsanalluraya/AI-Security-Scanner3.0@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -97,6 +117,15 @@ jobs:
         env:
           # 🔐 Secure AI Backend (Render)
           AI_BACKEND_URL:  https://ai-security-backend.onrender.com/analyze
+
+
+      # ============================
+      # Skip Message (only when empty) ✅ NEW
+      # ============================
+      - name: Skip scan (empty repo)
+        if: steps.repo_check.outputs.empty == 'true'
+        run: echo "🟡 Repository is empty — skipping security scan."
+
 
       # ============================
       # Upload Reports as Artifacts
@@ -136,7 +165,6 @@ jobs:
 
           # Push safely
           git push || echo "⚠ Push skipped (PR / no permission / no changes)"
-
 ```
 
 That's it! Push and the scanner runs automatically.
