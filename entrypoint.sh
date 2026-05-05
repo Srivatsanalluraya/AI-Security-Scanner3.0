@@ -146,54 +146,42 @@ python /app/src/reporters/dashboard.py \
 
 
 # ===============================
-# PR Detection
+# PR Detection (robust)
 # ===============================
 PR_NUMBER=""
 COMMIT_SHA=""
 
-if [[ -n "$GITHUB_EVENT_PATH" ]]; then
-    PR_NUMBER=$(jq -r ".pull_request.number // empty" "$GITHUB_EVENT_PATH" 2>/dev/null)
-    COMMIT_SHA=$(jq -r ".pull_request.head.sha // empty" "$GITHUB_EVENT_PATH")
+if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+    PR_NUMBER=$(jq -r ".pull_request.number" "$GITHUB_EVENT_PATH")
+    COMMIT_SHA=$(jq -r ".pull_request.head.sha" "$GITHUB_EVENT_PATH")
 fi
+
+echo "DEBUG: PR_NUMBER=$PR_NUMBER"
+
+
 # ===============================
-# Detailed Console Output (FORMATTED)
+# Detailed Report (single source of truth)
 # ===============================
 echo ""
 echo "▶ Generating detailed console report..."
 
 if [[ -f "reports/issues_detailed.json" ]]; then
 
-    python /app/src/reporters/pr_commenter.py \
-        --report "reports/issues_detailed.json" \
-        --repo "$GITHUB_REPOSITORY" \
-        --token "$GITHUB_TOKEN" \
-        --sha "${COMMIT_SHA:-}" \
-        || echo "⚠ Detailed report generation failed"
+    CMD="python /app/src/reporters/pr_commenter.py \
+        --report reports/issues_detailed.json \
+        --repo $GITHUB_REPOSITORY \
+        --token $GITHUB_TOKEN \
+        --sha ${COMMIT_SHA:-}"
+
+    if [[ -n "$PR_NUMBER" ]]; then
+        CMD="$CMD --pr $PR_NUMBER"
+    fi
+
+    eval $CMD || echo "⚠ Detailed report generation failed"
 
 else
     echo "⚠ No detailed report found"
 fi
-
-
-
-
-# ===============================
-# PR Comment (only for PR)
-# ===============================
-# #if [[ -n "$PR_NUMBER" ]]; then
-
-#    # echo ""
-#    # echo "▶ Posting PR comment..."
-
-#    # python /app/src/reporters/pr_commenter.py \
-#         --report "reports/issues_detailed.json" \
-#         --repo "$GITHUB_REPOSITORY" \
-#         --pr "$PR_NUMBER" \
-#         --token "$GITHUB_TOKEN" \
-#         --sha "$COMMIT_SHA" \
-#         || echo "⚠ PR comment failed"
-
-# fi
 
 
 # ===============================
