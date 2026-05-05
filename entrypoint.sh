@@ -180,20 +180,20 @@ fi
 # ===============================
 # PR Comment (only for PR)
 # ===============================
-if [[ -n "$PR_NUMBER" ]]; then
+# #if [[ -n "$PR_NUMBER" ]]; then
 
-    echo ""
-    echo "▶ Posting PR comment..."
+#    # echo ""
+#    # echo "▶ Posting PR comment..."
 
-    python /app/src/reporters/pr_commenter.py \
-        --report "reports/issues_detailed.json" \
-        --repo "$GITHUB_REPOSITORY" \
-        --pr "$PR_NUMBER" \
-        --token "$GITHUB_TOKEN" \
-        --sha "$COMMIT_SHA" \
-        || echo "⚠ PR comment failed"
+#    # python /app/src/reporters/pr_commenter.py \
+#         --report "reports/issues_detailed.json" \
+#         --repo "$GITHUB_REPOSITORY" \
+#         --pr "$PR_NUMBER" \
+#         --token "$GITHUB_TOKEN" \
+#         --sha "$COMMIT_SHA" \
+#         || echo "⚠ PR comment failed"
 
-fi
+# fi
 
 
 # ===============================
