@@ -19,7 +19,6 @@ GITHUB_TOKEN="${RAW_TOKEN:-$GITHUB_TOKEN}"
 # AI Backend Setup
 # ===============================
 
-# Default backend (override via env if needed)
 export AI_BACKEND_URL="${AI_BACKEND_URL:-https://ai-security-backend.onrender.com/analyze}"
 
 echo "🤖 Connecting to AI backend:"
@@ -44,6 +43,8 @@ export SCAN_PATH="$SCAN_PATH"
 
 echo "🔍 Scanning path: $SCAN_PATH"
 echo "🔐 Policy enforcement: $ENFORCE_POLICY"
+echo "🔎 Event: $GITHUB_EVENT_NAME"
+
 
 # ===============================
 # Warm Up Scanner
@@ -79,9 +80,7 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 ARTIFACTS_DIR="${GITHUB_WORKSPACE}/security-reports"
 mkdir -p "$ARTIFACTS_DIR"
 
-
 LIVE_REPORT="security-reports/live_report.json"
-
 
 if [[ -f "$LIVE_REPORT" ]]; then
     cp "$LIVE_REPORT" "$ARTIFACTS_DIR/scan-${TIMESTAMP}.json"
@@ -109,7 +108,6 @@ cat > "$ARTIFACTS_DIR/summary-${TIMESTAMP}.md" << EOF
 ## Note
 Generated using centralized AI backend.
 EOF
-
 
 echo "  ✓ summary-${TIMESTAMP}.md"
 echo "  📁 Location: security-reports/"
@@ -152,40 +150,64 @@ POLICY_EXIT_CODE=$?
 
 set -e
 
+
 # ===============================
 # Console Dashboard (always runs)
 # ===============================
+
 echo ""
 echo "▶ Generating console report..."
+
 python /app/src/reporters/dashboard.py \
   --report-dir "${GITHUB_WORKSPACE}/reports" \
   2>/dev/null || echo "⚠ Dashboard display failed"
 
 
 # ===============================
-# PR Comment
+# PR Detection
 # ===============================
 
+PR_NUMBER=""
+COMMIT_SHA=""
+
 if [[ -n "$GITHUB_EVENT_PATH" ]]; then
-
     PR_NUMBER=$(jq -r ".pull_request.number // empty" "$GITHUB_EVENT_PATH" 2>/dev/null)
+    COMMIT_SHA=$(jq -r ".pull_request.head.sha // empty" "$GITHUB_EVENT_PATH")
+fi
 
-    if [[ -n "$PR_NUMBER" ]]; then
 
-        echo ""
-        echo "▶ Posting PR comment..."
+# ===============================
+# Always Print Detailed Output
+# ===============================
 
-        COMMIT_SHA=$(jq -r ".pull_request.head.sha // empty" "$GITHUB_EVENT_PATH")
+echo ""
+echo "▶ Generating detailed console report..."
 
-        python /app/src/reporters/pr_commenter.py \
-            --report "reports/issues_detailed.json" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pr "$PR_NUMBER" \
-            --token "$GITHUB_TOKEN" \
-            --sha "$COMMIT_SHA" \
-            2>/dev/null || echo "⚠ PR comment failed"
+python /app/src/reporters/pr_commenter.py \
+    --report "reports/issues_detailed.json" \
+    --repo "$GITHUB_REPOSITORY" \
+    --token "$GITHUB_TOKEN" \
+    --sha "${COMMIT_SHA:-}" \
+    2>/dev/null || echo "⚠ Detailed report generation failed"
 
-    fi
+
+# ===============================
+# PR Comment (only if PR)
+# ===============================
+
+if [[ -n "$PR_NUMBER" ]]; then
+
+    echo ""
+    echo "▶ Posting PR comment..."
+
+    python /app/src/reporters/pr_commenter.py \
+        --report "reports/issues_detailed.json" \
+        --repo "$GITHUB_REPOSITORY" \
+        --pr "$PR_NUMBER" \
+        --token "$GITHUB_TOKEN" \
+        --sha "$COMMIT_SHA" \
+        2>/dev/null || echo "⚠ PR comment failed"
+
 fi
 
 
