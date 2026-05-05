@@ -35,8 +35,7 @@ A comprehensive security scanning tool for Python, JavaScript/Node.js, Java, and
 | Python | Bandit, Semgrep | pip-audit | Static code analysis, known vulnerabilities |
 | JavaScript/Node.js | Semgrep | - | Code patterns, security vulnerabilities |
 | Java | Semgrep | - | Code patterns, security vulnerabilities |
-| Go | Semgrep | - | Code patterns, security vulnerabilities |
-| Ruby, PHP, C, C++, etc. | Semgrep | - | Multi-language security patterns |
+
 
 **Note:** Semgrep's `--config auto` automatically detects and scans 30+ languages without requiring separate language runtimes.
 
