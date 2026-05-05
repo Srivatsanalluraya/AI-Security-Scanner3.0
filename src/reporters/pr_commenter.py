@@ -284,8 +284,8 @@ def main():
     p = argparse.ArgumentParser()
 
     p.add_argument("--report")
-    p.add_argument("--repo", required=True)
-    p.add_argument("--pr", required=True)
+    p.add_argument("--repo")
+    p.add_argument("--pr")
     p.add_argument("--token")
     p.add_argument("--sha")
 
@@ -317,8 +317,8 @@ def main():
     # =================================================
     # POST TO PR
     # =================================================
-
-    post_comment(args.repo, args.pr, token, body)
+    if args.pr and args.repo:
+        post_comment(args.repo, args.pr, token, body)
 
     # Commit Status
     if args.sha:
