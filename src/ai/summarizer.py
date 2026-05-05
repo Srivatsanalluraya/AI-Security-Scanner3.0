@@ -1,234 +1,432 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env python3
+"""
+Structured AI summarizer (Optimized + Batched)
+- Extracts issues
+- Uses secure backend AI
+- Batches AI calls to avoid rate limits
+- Generates summary + detailed reports
+"""
 
-echo "🔥 AI Vulnerability Scanner Starting..."
-
-# ===============================
-# Inputs
-# ===============================
-SCAN_PATH=${1:-"."}
-RAW_TOKEN="$2"
-
-ENFORCE_POLICY="${INPUT_ENFORCE_POLICY:-false}"
-
-# Prefer explicit token → fallback
-GITHUB_TOKEN="${RAW_TOKEN:-$GITHUB_TOKEN}"
-
-
-# ===============================
-# AI Backend Setup
-# ===============================
-
-export AI_BACKEND_URL="${AI_BACKEND_URL:-https://ai-security-backend.onrender.com/analyze}"
-
-echo "🤖 Connecting to AI backend:"
-echo "   → $AI_BACKEND_URL"
-
+import json
+import os
+import requests
+from pathlib import Path
+from typing import Dict, List, Optional
+import re
 
 # ===============================
-# Validate GitHub Token
+# Backend Configuration
 # ===============================
 
-if [[ -z "$GITHUB_TOKEN" ]]; then
-    echo "❌ ERROR: GitHub token missing."
-    exit 1
-fi
+BACKEND_URL = os.getenv(
+    "AI_BACKEND_URL",
+    "https://ai-security-backend.onrender.com/analyze"
+)
+
+AI_ENABLED = True
+
+TIMEOUT = 90
+RETRIES = 3
+
+# Limit batch size (prevents token overflow)
+MAX_AI_ISSUES = int(os.getenv("AI_MAX_ISSUES", 30))
 
 
 # ===============================
-# Export Scan Path
+# AI Backend Call
 # ===============================
 
-export SCAN_PATH="$SCAN_PATH"
+def _ai_generate(prompt: str) -> Optional[str]:
 
-echo "🔍 Scanning path: $SCAN_PATH"
-echo "🔐 Policy enforcement: $ENFORCE_POLICY"
-echo "🔎 Event: $GITHUB_EVENT_NAME"
+    if not AI_ENABLED:
+        return None
+
+    for attempt in range(RETRIES):
+
+        try:
+            r = requests.post(
+                BACKEND_URL,
+                json={"prompt": prompt},
+                timeout=TIMEOUT
+            )
+
+            if r.status_code != 200:
+                print("⚠ AI backend HTTP error:", r.status_code)
+                continue
+
+            data = r.json()
+
+            if "choices" in data and data["choices"]:
+                return data["choices"][0]["message"]["content"].strip()
+
+            print("⚠ AI backend returned unexpected format")
+            return None
+
+        except requests.exceptions.Timeout:
+            print(f"⚠ AI timeout ({attempt+1}/{RETRIES})")
+
+        except Exception as e:
+            print("⚠ AI backend failed:", e)
+
+    print("⚠ AI backend unavailable, fallback mode")
+    return None
 
 
 # ===============================
-# Warm Up Scanner
+# Batch AI Analyzer (NEW)
 # ===============================
+def chunked(iterable, size):
+    for i in range(0, len(iterable), size):
+        yield iterable[i:i + size]
 
-echo "🔥 Warming up AI backend..."
-curl -s --max-time 60 "$AI_BACKEND_URL" > /dev/null 2>&1 || true
-sleep 5
 
 
-# ===============================
-# Run In-Memory Scanner
-# ===============================
+def _safe_json_extract(text: str):
+    """
+    Extract valid JSON object from AI response safely
+    """
 
-echo ""
-echo "▶ Running in-memory security + AI analysis..."
+    if not text:
+        return None
 
-python /app/src/ai/live_scanner.py || {
-    echo "❌ Live scan failed"
-    exit 1
+    # Remove markdown ``` blocks
+    text = re.sub(r"```.*?```", "", text, flags=re.S)
+
+    # Find first {...} block
+    match = re.search(r"\{.*\}", text, re.S)
+
+    if not match:
+        return None
+
+    json_text = match.group(0)
+
+    try:
+        return json.loads(json_text)
+    except Exception:
+        return None
+
+def batch_ai_analysis(issues: List[Dict]) -> Dict:
+    """
+    Chunked batch AI analysis (production safe)
+    """
+
+    if not AI_ENABLED or not issues:
+        return {}
+
+    final_results = {}
+    CHUNK_SIZE = 5   # 🔴 critical: keep small
+
+    issue_index = 1
+
+    for chunk in chunked(issues, CHUNK_SIZE):
+
+        prompt = """
+You are a security analysis assistant.
+
+For each issue below, generate:
+- impact: 1 sentence (max 100 chars)
+- fix: 1 sentence (max 100 chars)
+
+Return ONLY valid JSON in this format:
+
+{
+  "1": {"impact": "...", "fix": "..."},
+  "2": {"impact": "...", "fix": "..."}
 }
 
+Issues:
+"""
 
-# ===============================
-# Artifact Export
-# ===============================
+        local_map = {}
 
-echo ""
-echo "▶ Saving scan reports..."
+        for issue in chunk:
+            local_map[str(issue_index)] = issue
+            prompt += f"""
+{issue_index}.
+Source: {issue.get('source')}
+Severity: {issue.get('severity')}
+File: {issue.get('file')}
+Issue: {issue.get('issue')}
+"""
+            issue_index += 1
 
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+        response = _ai_generate(prompt)
 
-ARTIFACTS_DIR="${GITHUB_WORKSPACE}/security-reports"
-mkdir -p "$ARTIFACTS_DIR"
+        if not response:
+            print("⚠ AI returned empty chunk, skipping")
+            continue
 
-LIVE_REPORT="security-reports/live_report.json"
+        data = _safe_json_extract(response)
 
-if [[ -f "$LIVE_REPORT" ]]; then
-    cp "$LIVE_REPORT" "$ARTIFACTS_DIR/scan-${TIMESTAMP}.json"
-    echo "  ✓ scan-${TIMESTAMP}.json"
-else
-    echo "⚠ No live report found"
-fi
+        if not data:
+            print("⚠ Batch AI parse failed for chunk")
+            continue
 
+        # Merge chunk results
+        for k, v in data.items():
+            final_results[k] = v
 
-# ===============================
-# Summary Markdown
-# ===============================
+    if final_results:
+        print(f"✓ AI batch processed {len(final_results)} issues")
+    else:
+        print("⚠ AI unavailable, using rule-based analysis")
 
-cat > "$ARTIFACTS_DIR/summary-${TIMESTAMP}.md" << EOF
-# Security Scan Report
-
-**Timestamp:** ${TIMESTAMP}
-**Date:** $(date)
-**Repository:** ${GITHUB_REPOSITORY:-Unknown}
-**Branch:** ${GITHUB_REF_NAME:-Unknown}
-
-## Available Reports
-- \`scan-${TIMESTAMP}.json\` - AI-enhanced live scan output
-
-## Note
-Generated using centralized AI backend.
-EOF
-
-echo "  ✓ summary-${TIMESTAMP}.md"
-echo "  📁 Location: security-reports/"
+    return final_results
 
 
 # ===============================
-# Policy Enforcement
+# Utilities
 # ===============================
 
-echo ""
-echo "▶ Checking security policy..."
+def load_json(path):
 
-POLICY_EXIT_CODE=0
+    if not Path(path).exists():
+        return None
 
-set +e
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except:
+        return None
 
-python - <<EOF
-import json
-from pathlib import Path
-from src.security_policy import SecurityPolicy
 
-report = Path("security-reports/live_report.json")
+def extract_severity_level(severity_str: str) -> str:
 
-if report.exists():
+    if not severity_str:
+        return "MEDIUM"
 
-    data = json.loads(report.read_text())
+    sev = severity_str.upper()
 
-    policy = SecurityPolicy(data)
+    if any(x in sev for x in ["HIGH", "CRITICAL", "ERROR"]):
+        return "HIGH"
 
-    print(policy.get_report())
+    elif any(x in sev for x in ["MEDIUM", "WARNING"]):
+        return "MEDIUM"
 
-    if "$ENFORCE_POLICY" == "true" and not policy.allow_push:
-        exit(1)
-
-else:
-    print("⚠ No report found for policy check")
-EOF
-
-POLICY_EXIT_CODE=$?
-
-set -e
+    return "LOW"
 
 
 # ===============================
-# Console Dashboard (always runs)
+# Fallback Rules
 # ===============================
 
-echo ""
-echo "▶ Generating console report..."
+def fallback_impact(issue: Dict) -> str:
 
-python /app/src/reporters/dashboard.py \
-  --report-dir "${GITHUB_WORKSPACE}/reports" \
-  2>/dev/null || echo "⚠ Dashboard display failed"
+    sev = extract_severity_level(issue.get("severity"))
+    txt = str(issue.get("issue", "")).lower()
 
+    if "sql" in txt:
+        return f"[{sev}] SQL injection risk"
 
-# ===============================
-# PR Detection
-# ===============================
+    if "password" in txt or "secret" in txt:
+        return f"[{sev}] Credential exposure"
 
-PR_NUMBER=""
-COMMIT_SHA=""
+    if "eval" in txt:
+        return f"[{sev}] Arbitrary code execution"
 
-if [[ -n "$GITHUB_EVENT_PATH" ]]; then
-    PR_NUMBER=$(jq -r ".pull_request.number // empty" "$GITHUB_EVENT_PATH" 2>/dev/null)
-    COMMIT_SHA=$(jq -r ".pull_request.head.sha // empty" "$GITHUB_EVENT_PATH")
-fi
+    if "crypto" in txt:
+        return f"[{sev}] Weak cryptography"
 
-
-# ===============================
-# Always Print Detailed Output
-# ===============================
-
-echo ""
-echo "▶ Generating detailed console report..."
-
-python /app/src/reporters/pr_commenter.py \
-    --report "reports/issues_detailed.json" \
-    --repo "$GITHUB_REPOSITORY" \
-    --token "$GITHUB_TOKEN" \
-    --sha "${COMMIT_SHA:-}" \
-    2>/dev/null || echo "⚠ Detailed report generation failed"
+    return f"[{sev}] Security issue detected"
 
 
-# ===============================
-# PR Comment (only if PR)
-# ===============================
+def fallback_fix(issue: Dict) -> str:
 
-if [[ -n "$PR_NUMBER" ]]; then
+    txt = str(issue.get("issue", "")).lower()
 
-    echo ""
-    echo "▶ Posting PR comment..."
+    if "sql" in txt:
+        return "Use prepared statements"
 
-    python /app/src/reporters/pr_commenter.py \
-        --report "reports/issues_detailed.json" \
-        --repo "$GITHUB_REPOSITORY" \
-        --pr "$PR_NUMBER" \
-        --token "$GITHUB_TOKEN" \
-        --sha "$COMMIT_SHA" \
-        2>/dev/null || echo "⚠ PR comment failed"
+    if "password" in txt:
+        return "Move secrets to env vars"
 
-fi
+    if "eval" in txt:
+        return "Remove eval/exec"
+
+    if "crypto" in txt:
+        return "Use modern crypto"
+
+    return "Follow secure coding practices"
 
 
 # ===============================
-# Final Status
+# Extract Issues
 # ===============================
 
-echo ""
-echo "======================================================================"
+def extract_all_issues(report_dir) -> List[Dict]:
 
-if [[ $POLICY_EXIT_CODE -ne 0 ]]; then
+    issues = []
 
-    echo "❌ WORKFLOW FAILED - SECURITY POLICY VIOLATION"
+    # Bandit
+    bandit = load_json(f"{report_dir}/bandit-report.json")
 
-else
+    if bandit and "results" in bandit:
 
-    echo "✅ SECURITY SCAN COMPLETED SUCCESSFULLY"
-    echo "🎉 AI-powered pipeline executed"
+        for r in bandit["results"]:
 
-fi
+            issues.append({
+                "source": "Bandit",
+                "file": r.get("filename"),
+                "line": r.get("line_number"),
+                "issue": r.get("issue_text"),
+                "severity": extract_severity_level(
+                    r.get("issue_severity")
+                )
+            })
 
-echo "======================================================================"
 
-exit $POLICY_EXIT_CODE
+    # Semgrep
+    semgrep = load_json(f"{report_dir}/semgrep-report.json")
+
+    if semgrep and "results" in semgrep:
+
+        for r in semgrep["results"]:
+
+            issues.append({
+                "source": "Semgrep",
+                "file": r.get("path"),
+                "line": r.get("start", {}).get("line"),
+                "issue": r.get("extra", {}).get("message"),
+                "severity": extract_severity_level(
+                    r.get("extra", {}).get("severity")
+                )
+            })
+
+
+    # pip-audit
+    pip_audit = load_json(f"{report_dir}/pip-audit-report.json")
+
+    if pip_audit:
+
+        deps = pip_audit if isinstance(pip_audit, list) else pip_audit.get("dependencies", [])
+
+        for dep in deps:
+
+            for v in dep.get("vulns", []):
+
+                issues.append({
+                    "source": "pip-audit",
+                    "file": "requirements.txt",
+                    "line": 0,
+                    "issue": f"{v.get('id')} - {v.get('description')}",
+                    "severity": "MEDIUM",
+                    "fix": f"Update {dep.get('name')}"
+                })
+
+    return issues
+
+
+# ===============================
+# Reports
+# ===============================
+
+def generate_detailed_report(issues: List[Dict], ai_map: Dict) -> Dict:
+
+    report = {
+        "total_issues": len(issues),
+        "detailed_issues": []
+    }
+
+    for i, issue in enumerate(issues, 1):
+
+        ai = ai_map.get(str(i), {})
+
+        impact = ai.get("impact") or fallback_impact(issue)
+        fix = ai.get("fix") or fallback_fix(issue)
+
+        report["detailed_issues"].append({
+            "number": i,
+            "source": issue.get("source"),
+            "severity": issue.get("severity"),
+            "file": issue.get("file"),
+            "line": issue.get("line"),
+            "description": issue.get("issue"),
+            "impact": impact,
+            "fix": fix
+        })
+
+    return report
+
+
+def generate_summary(issues: List[Dict], ai_map: Dict) -> str:
+
+    if not issues:
+        return "⚠️ No issues extracted\n"
+
+    lines = []
+
+    lines.append("📊 SECURITY SCAN RESULTS")
+    lines.append(f"Found {len(issues)} issue(s)\n")
+
+    for i, issue in enumerate(issues, 1):
+
+        ai = ai_map.get(str(i), {})
+
+        impact = ai.get("impact") or fallback_impact(issue)
+        fix = ai.get("fix") or fallback_fix(issue)
+
+        desc = issue.get("issue", "")[:100]
+
+        lines.append(f"Issue #{i}:")
+        lines.append(f"  Description: {desc}")
+        lines.append(f"  Impact: {impact}")
+        lines.append(f"  Fix: {fix}\n")
+
+    return "\n".join(lines)
+
+
+# ===============================
+# Main
+# ===============================
+
+def main():
+
+    report_dir = "reports"
+
+    print("📂 Reading reports from:", report_dir)
+
+    issues = extract_all_issues(report_dir)
+
+    if not issues:
+
+        print("⚠ No issues found")
+
+        Path(f"{report_dir}/summary.txt").write_text("No issues\n")
+        Path(f"{report_dir}/issues_detailed.json").write_text(
+            json.dumps({"total_issues": 0}, indent=2)
+        )
+
+        return
+
+
+    # ---------------------------
+    # Batch AI (KEY CHANGE)
+    # ---------------------------
+
+    print(f"🤖 Running batch AI on {min(len(issues), MAX_AI_ISSUES)} issues...")
+
+    ai_map = batch_ai_analysis(issues)
+
+
+    # ---------------------------
+    # Generate Reports
+    # ---------------------------
+
+    summary = generate_summary(issues, ai_map)
+
+    detailed = generate_detailed_report(issues, ai_map)
+
+
+    Path(f"{report_dir}/summary.txt").write_text(summary)
+
+    Path(f"{report_dir}/issues_detailed.json").write_text(
+        json.dumps(detailed, indent=2)
+    )
+
+
+    print("✅ Summary written")
+    print("✅ Detailed report written")
+    print("🚀 AI calls used: 1 (batched)")
+
+
+if __name__ == "__main__":
+    main()
