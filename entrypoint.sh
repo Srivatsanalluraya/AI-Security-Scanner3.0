@@ -171,12 +171,15 @@ if [[ -f "reports/issues_detailed.json" ]]; then
         --report reports/issues_detailed.json \
         --repo $GITHUB_REPOSITORY \
         --token $GITHUB_TOKEN \
-        --sha ${COMMIT_SHA:-}"
+        
 
     if [[ -n "$PR_NUMBER" ]]; then
         CMD="$CMD --pr $PR_NUMBER"
     fi
 
+    if [[ -n "$COMMIT_SHA" ]]; then
+        CMD="$CMD --sha $COMMIT_SHA"
+    fi
     eval $CMD || echo "⚠ Detailed report generation failed"
 
 else
