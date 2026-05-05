@@ -87,7 +87,7 @@ jobs:
 
 
       # ============================
-      # Check if Repo has Files  ✅ NEW
+      # Check if Repo has Files
       # ============================
       - name: Check if repository has files
         id: repo_check
@@ -109,29 +109,28 @@ jobs:
       # Run AI Security Scanner
       # ============================
       - name: Run AI Security Scanner
-        if: steps.repo_check.outputs.empty == 'false'   # ✅ MODIFIED
+        if: steps.repo_check.outputs.empty == 'false'
         uses: Srivatsanalluraya/AI-Security-Scanner3.0@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           enforce_policy: "true"
         env:
-          # 🔐 Secure AI Backend (Render)
-          AI_BACKEND_URL:  https://ai-security-backend.onrender.com/analyze
+          AI_BACKEND_URL: https://ai-security-backend.onrender.com/analyze
 
 
       # ============================
-      # Skip Message (only when empty) ✅ NEW
+      # Skip Message (empty repo)
       # ============================
       - name: Skip scan (empty repo)
         if: steps.repo_check.outputs.empty == 'true'
-        run: echo "🟡 Repository is empty — skipping security scan."
+        run: echo "🟡 Repository is empty — skipping scan and artifacts."
 
 
       # ============================
       # Upload Reports as Artifacts
       # ============================
       - name: Upload Security Reports
-        if: always()
+        if: steps.repo_check.outputs.empty == 'false'   # ✅ added condition
         uses: actions/upload-artifact@v4
         with:
           name: security-reports-${{ github.run_number }}
@@ -145,7 +144,7 @@ jobs:
       # Commit Generated Reports
       # ============================
       - name: Commit scan reports
-        if: always()
+        if: steps.repo_check.outputs.empty == 'false'   # ✅ added condition
         run: |
 
           echo "📦 Committing security reports..."
@@ -153,17 +152,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Ensure directory exists
           mkdir -p security-reports
 
-          # Stage reports
           git add security-reports/ || true
 
-          # Commit if changed
           git diff --cached --quiet || \
             git commit -m "📊 Automated security scan report [skip ci]"
 
-          # Push safely
           git push || echo "⚠ Push skipped (PR / no permission / no changes)"
 ```
 
