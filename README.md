@@ -98,6 +98,19 @@ jobs:
           # 🔐 Secure AI Backend (Render)
           AI_BACKEND_URL:  https://ai-security-backend.onrender.com/analyze
 
+      # ============================
+      # Upload Reports as Artifacts
+      # ============================
+      - name: Upload Security Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports-${{ github.run_number }}
+          path: |
+            security-reports/
+            reports/
+          retention-days: 7
+
 
       # ============================
       # Commit Generated Reports
