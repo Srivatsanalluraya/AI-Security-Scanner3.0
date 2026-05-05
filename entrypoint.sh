@@ -157,10 +157,11 @@ if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
 fi
 
 echo "DEBUG: PR_NUMBER=$PR_NUMBER"
+echo "DEBUG: COMMIT_SHA=$COMMIT_SHA"
 
 
 # ===============================
-# Detailed Report (single source of truth)
+# Detailed Report (single call)
 # ===============================
 echo ""
 echo "▶ Generating detailed console report..."
@@ -170,16 +171,18 @@ if [[ -f "reports/issues_detailed.json" ]]; then
     CMD="python /app/src/reporters/pr_commenter.py \
         --report reports/issues_detailed.json \
         --repo $GITHUB_REPOSITORY \
-        --token $GITHUB_TOKEN \
-        
+        --token $GITHUB_TOKEN"
 
+    # Add PR only if exists
     if [[ -n "$PR_NUMBER" ]]; then
         CMD="$CMD --pr $PR_NUMBER"
     fi
 
+    # Add SHA only if exists
     if [[ -n "$COMMIT_SHA" ]]; then
         CMD="$CMD --sha $COMMIT_SHA"
     fi
+
     eval $CMD || echo "⚠ Detailed report generation failed"
 
 else
