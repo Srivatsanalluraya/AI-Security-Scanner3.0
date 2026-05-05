@@ -155,19 +155,26 @@ if [[ -n "$GITHUB_EVENT_PATH" ]]; then
     PR_NUMBER=$(jq -r ".pull_request.number // empty" "$GITHUB_EVENT_PATH" 2>/dev/null)
     COMMIT_SHA=$(jq -r ".pull_request.head.sha // empty" "$GITHUB_EVENT_PATH")
 fi
-
-
 # ===============================
-# Detailed Console Output (FIXED)
+# Detailed Console Output (FORMATTED)
 # ===============================
 echo ""
-echo "▶ Detailed Security Report"
+echo "▶ Generating detailed console report..."
 
 if [[ -f "reports/issues_detailed.json" ]]; then
-    cat reports/issues_detailed.json
+
+    python /app/src/reporters/pr_commenter.py \
+        --report "reports/issues_detailed.json" \
+        --repo "$GITHUB_REPOSITORY" \
+        --token "$GITHUB_TOKEN" \
+        --sha "${COMMIT_SHA:-}" \
+        || echo "⚠ Detailed report generation failed"
+
 else
     echo "⚠ No detailed report found"
 fi
+
+
 
 
 # ===============================
