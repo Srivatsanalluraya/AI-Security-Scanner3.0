@@ -10,15 +10,14 @@ SCAN_PATH=${1:-"."}
 RAW_TOKEN="$2"
 
 ENFORCE_POLICY="${INPUT_ENFORCE_POLICY:-false}"
-
-# Prefer explicit token → fallback
 GITHUB_TOKEN="${RAW_TOKEN:-$GITHUB_TOKEN}"
+
+echo "🔎 Event: $GITHUB_EVENT_NAME"
 
 
 # ===============================
 # AI Backend Setup
 # ===============================
-
 export AI_BACKEND_URL="${AI_BACKEND_URL:-https://ai-security-backend.onrender.com/analyze}"
 
 echo "🤖 Connecting to AI backend:"
@@ -26,9 +25,8 @@ echo "   → $AI_BACKEND_URL"
 
 
 # ===============================
-# Validate GitHub Token
+# Validate Token
 # ===============================
-
 if [[ -z "$GITHUB_TOKEN" ]]; then
     echo "❌ ERROR: GitHub token missing."
     exit 1
@@ -36,29 +34,25 @@ fi
 
 
 # ===============================
-# Export Scan Path
+# Scan Setup
 # ===============================
-
 export SCAN_PATH="$SCAN_PATH"
 
 echo "🔍 Scanning path: $SCAN_PATH"
 echo "🔐 Policy enforcement: $ENFORCE_POLICY"
-echo "🔎 Event: $GITHUB_EVENT_NAME"
 
 
 # ===============================
-# Warm Up Scanner
+# Warm Up
 # ===============================
-
 echo "🔥 Warming up AI backend..."
 curl -s --max-time 60 "$AI_BACKEND_URL" > /dev/null 2>&1 || true
 sleep 5
 
 
 # ===============================
-# Run In-Memory Scanner
+# Run Scanner
 # ===============================
-
 echo ""
 echo "▶ Running in-memory security + AI analysis..."
 
@@ -69,15 +63,14 @@ python /app/src/ai/live_scanner.py || {
 
 
 # ===============================
-# Artifact Export
+# Save Artifacts
 # ===============================
-
 echo ""
 echo "▶ Saving scan reports..."
 
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-
 ARTIFACTS_DIR="${GITHUB_WORKSPACE}/security-reports"
+
 mkdir -p "$ARTIFACTS_DIR"
 
 LIVE_REPORT="security-reports/live_report.json"
@@ -93,7 +86,6 @@ fi
 # ===============================
 # Summary Markdown
 # ===============================
-
 cat > "$ARTIFACTS_DIR/summary-${TIMESTAMP}.md" << EOF
 # Security Scan Report
 
@@ -103,25 +95,20 @@ cat > "$ARTIFACTS_DIR/summary-${TIMESTAMP}.md" << EOF
 **Branch:** ${GITHUB_REF_NAME:-Unknown}
 
 ## Available Reports
-- \`scan-${TIMESTAMP}.json\` - AI-enhanced live scan output
+- \`scan-${TIMESTAMP}.json\`
 
-## Note
-Generated using centralized AI backend.
 EOF
 
 echo "  ✓ summary-${TIMESTAMP}.md"
-echo "  📁 Location: security-reports/"
 
 
 # ===============================
 # Policy Enforcement
 # ===============================
-
 echo ""
 echo "▶ Checking security policy..."
 
 POLICY_EXIT_CODE=0
-
 set +e
 
 python - <<EOF
@@ -132,41 +119,35 @@ from src.security_policy import SecurityPolicy
 report = Path("security-reports/live_report.json")
 
 if report.exists():
-
     data = json.loads(report.read_text())
-
     policy = SecurityPolicy(data)
 
     print(policy.get_report())
 
     if "$ENFORCE_POLICY" == "true" and not policy.allow_push:
         exit(1)
-
 else:
     print("⚠ No report found for policy check")
 EOF
 
 POLICY_EXIT_CODE=$?
-
 set -e
 
 
 # ===============================
-# Console Dashboard (always runs)
+# Dashboard (always)
 # ===============================
-
 echo ""
-echo "▶ Generating console report..."
+echo "▶ Generating dashboard..."
 
 python /app/src/reporters/dashboard.py \
   --report-dir "${GITHUB_WORKSPACE}/reports" \
-  2>/dev/null || echo "⚠ Dashboard display failed"
+  || echo "⚠ Dashboard failed"
 
 
 # ===============================
 # PR Detection
 # ===============================
-
 PR_NUMBER=""
 COMMIT_SHA=""
 
@@ -177,24 +158,21 @@ fi
 
 
 # ===============================
-# Always Print Detailed Output
+# Detailed Console Output (FIXED)
 # ===============================
-
 echo ""
-echo "▶ Generating detailed console report..."
+echo "▶ Detailed Security Report"
 
-python /app/src/reporters/pr_commenter.py \
-    --report "reports/issues_detailed.json" \
-    --repo "$GITHUB_REPOSITORY" \
-    --token "$GITHUB_TOKEN" \
-    --sha "${COMMIT_SHA:-}" \
-    2>/dev/null || echo "⚠ Detailed report generation failed"
+if [[ -f "reports/issues_detailed.json" ]]; then
+    cat reports/issues_detailed.json
+else
+    echo "⚠ No detailed report found"
+fi
 
 
 # ===============================
-# PR Comment (only if PR)
+# PR Comment (only for PR)
 # ===============================
-
 if [[ -n "$PR_NUMBER" ]]; then
 
     echo ""
@@ -206,7 +184,7 @@ if [[ -n "$PR_NUMBER" ]]; then
         --pr "$PR_NUMBER" \
         --token "$GITHUB_TOKEN" \
         --sha "$COMMIT_SHA" \
-        2>/dev/null || echo "⚠ PR comment failed"
+        || echo "⚠ PR comment failed"
 
 fi
 
@@ -214,19 +192,13 @@ fi
 # ===============================
 # Final Status
 # ===============================
-
 echo ""
 echo "======================================================================"
 
 if [[ $POLICY_EXIT_CODE -ne 0 ]]; then
-
     echo "❌ WORKFLOW FAILED - SECURITY POLICY VIOLATION"
-
 else
-
     echo "✅ SECURITY SCAN COMPLETED SUCCESSFULLY"
-    echo "🎉 AI-powered pipeline executed"
-
 fi
 
 echo "======================================================================"
