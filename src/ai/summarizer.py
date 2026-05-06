@@ -114,28 +114,36 @@ def batch_ai_analysis(issues: List[Dict]) -> Dict:
         return {}
 
     final_results = {}
-    CHUNK_SIZE = 5   # 🔴 critical: keep small
+    CHUNK_SIZE = 9   # 🔴 critical: keep small
 
     issue_index = 1
 
     for chunk in chunked(issues, CHUNK_SIZE):
 
         prompt = """
-You are a security analysis assistant.
+                You are a senior application security engineer.
 
-For each issue below, generate:
-- impact: 1 sentence (max 100 chars)
-- fix: 1 sentence (max 100 chars)
+                For each issue below, generate:
+                - impact: 1 concise sentence
+                - fix: specific actionable remediation
 
-Return ONLY valid JSON in this format:
+                Rules:
+                - Mention exact package upgrades if available
+                - Mention HTTPS/TLS fixes explicitly
+                - Prefer command-level fixes when possible
+                - Avoid generic advice
+                - Keep responses concise
 
-{
-  "1": {"impact": "...", "fix": "..."},
-  "2": {"impact": "...", "fix": "..."}
-}
+                Return ONLY valid JSON in this format:
 
-Issues:
-"""
+                {
+                  "1": {"impact": "...", "fix": "..."},
+                  "2": {"impact": "...", "fix": "..."}
+                }            
+
+                Issues:
+        """
+
 
         local_map = {}
 
@@ -147,6 +155,10 @@ Source: {issue.get('source')}
 Severity: {issue.get('severity')}
 File: {issue.get('file')}
 Issue: {issue.get('issue')}
+Rule ID: {issue.get('rule_id')}
+Package: {issue.get('package')}
+Fixed Version: {issue.get('fixed_version')}
+Snippet: {(issue.get('snippet') or '')[:200]}
 """
             issue_index += 1
 
@@ -270,7 +282,9 @@ def extract_all_issues(report_dir) -> List[Dict]:
                 "issue": r.get("issue_text"),
                 "severity": extract_severity_level(
                     r.get("issue_severity")
-                )
+                ),
+                "rule_id": r.get("test_id"),
+                "snippet": r.get("code", ""),
             })
 
 
@@ -288,7 +302,9 @@ def extract_all_issues(report_dir) -> List[Dict]:
                 "issue": r.get("extra", {}).get("message"),
                 "severity": extract_severity_level(
                     r.get("extra", {}).get("severity")
-                )
+                ),
+                "rule_id": r.get("check_id"),
+                "snippet": r.get("extra", {}).get("lines", ""),
             })
 
 
@@ -309,7 +325,9 @@ def extract_all_issues(report_dir) -> List[Dict]:
                     "line": 0,
                     "issue": f"{v.get('id')} - {v.get('description')}",
                     "severity": "MEDIUM",
-                    "fix": f"Update {dep.get('name')}"
+                    "fix": f"Update {dep.get('name')}",
+                    "package": dep.get("name"),
+                    "fixed_version": v.get("fix_versions"),
                 })
 
     return issues
