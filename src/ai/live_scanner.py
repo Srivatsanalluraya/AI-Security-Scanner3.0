@@ -223,7 +223,7 @@ def collect_issues(scan_path=".") -> List[Dict]:
 
         retire = run_json([
             "retire",
-            "--js",
+            #"--js",
             "--outputformat", "json"
         ])
 
