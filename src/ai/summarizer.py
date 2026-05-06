@@ -116,59 +116,73 @@ def _safe_json_extract(text: str):
 
 def batch_ai_analysis(issues: List[Dict]) -> Dict:
     """
-    Chunked batch AI analysis (production safe)
+    Chunked batch AI analysis (optimized + rate-limit safe)
     """
 
     if not AI_ENABLED or not issues:
         return {}
 
     final_results = {}
-    CHUNK_SIZE = 5   # 🔴 critical: keep small
+
+    # Keep conservative for Groq TPM limits
+    CHUNK_SIZE = 5
+
+    # Limit total AI analyzed issues
+    issues = issues[:15]
 
     issue_index = 1
 
     for chunk in chunked(issues, CHUNK_SIZE):
 
         prompt = """
-                You are a senior application security engineer.
+You are a security engineer.
 
-                For each issue below, generate:
-                - impact: 1 concise sentence
-                - fix: specific actionable remediation
+For each issue return:
+- impact
+- specific fix
 
-                Rules:
-                - Mention exact package upgrades if available
-                - Mention HTTPS/TLS fixes explicitly
-                - Prefer command-level fixes when possible
-                - Avoid generic advice
-                - Keep responses concise
+Use concise actionable fixes.
+Return ONLY valid JSON.
 
-                Return ONLY valid JSON in this format:
+Format:
+{
+  "1": {"impact": "...", "fix": "..."}
+}
 
-                {
-                  "1": {"impact": "...", "fix": "..."},
-                  "2": {"impact": "...", "fix": "..."}
-                }            
-
-                Issues:
-        """
-
+Issues:
+"""
 
         local_map = {}
 
         for issue in chunk:
+
             local_map[str(issue_index)] = issue
+
             prompt += f"""
 {issue_index}.
 Source: {issue.get('source')}
 Severity: {issue.get('severity')}
 File: {issue.get('file')}
+Line: {issue.get('line')}
 Issue: {issue.get('issue')}
-Rule ID: {issue.get('rule_id')}
-Package: {issue.get('package')}
-Fixed Version: {issue.get('fixed_version')}
-Snippet: {(issue.get('snippet') or '')[:145]}
 """
+
+            # Optional compact fields
+            if issue.get("rule_id"):
+                prompt += f"Rule ID: {issue.get('rule_id')}\n"
+
+            if issue.get("package"):
+                prompt += f"Package: {issue.get('package')}\n"
+
+            if issue.get("fixed_version"):
+                prompt += f"Fixed Version: {issue.get('fixed_version')}\n"
+
+            # Keep snippet tiny
+            snippet = (issue.get("snippet") or "")[:80]
+
+            if snippet:
+                prompt += f"Snippet: {snippet}\n"
+
             issue_index += 1
 
         response = _ai_generate(prompt)
