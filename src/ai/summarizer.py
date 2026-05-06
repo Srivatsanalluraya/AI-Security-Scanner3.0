@@ -142,6 +142,8 @@ For each issue return:
 - specific fix
 
 Use concise actionable fixes.
+You MUST return results for EVERY ISSUE NUMBER provided.
+Do NOT SKIP any issues
 Return ONLY valid JSON.
 
 Format:
@@ -261,6 +263,9 @@ def fallback_impact(issue: Dict) -> str:
     if "crypto" in txt:
         return f"[{sev}] Weak cryptography"
 
+    if "dependency" in txt or "vulnerability" in txt:
+        return f"[{sev}] Vulnerable dependency may expose application to known exploits"
+
     return f"[{sev}] Security issue detected"
 
 
@@ -279,6 +284,9 @@ def fallback_fix(issue: Dict) -> str:
 
     if "crypto" in txt:
         return "Use modern crypto"
+
+    if "dependency" in txt or "vulnerability" in txt:
+        return "update vulneraable dependency to latest secure version"
 
     return "Follow secure coding practices"
 
