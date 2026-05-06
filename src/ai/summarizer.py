@@ -91,18 +91,25 @@ def chunked(iterable, size):
 
 def _safe_json_extract(text: str):
     """
-    Extract valid JSON object from AI response safely
+    Robust JSON extractor for AI responses
     """
 
     if not text:
         return None
 
-    # Remove markdown ``` blocks
-    text = text.replace("```json","")
-    text = text.replace("```","")
+    # Remove markdown fences only
+    text = text.replace("```json", "")
+    text = text.replace("```", "")
+    text = text.strip()
 
-    # Find first {...} block
-    match = re.search(r"\{.*\}", text)
+    # Try direct parse first
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+
+    # Fallback: extract largest JSON object
+    match = re.search(r'\{[\s\S]*\}', text)
 
     if not match:
         return None
@@ -111,7 +118,9 @@ def _safe_json_extract(text: str):
 
     try:
         return json.loads(json_text)
-    except Exception:
+    except Exception as e:
+        print("⚠ JSON extraction failed:", str(e))
+        print("DEBUG RAW AI TEXT:", text[:1000])
         return None
 
 def batch_ai_analysis(issues: List[Dict]) -> Dict:
