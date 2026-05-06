@@ -65,7 +65,9 @@ def _ai_generate(prompt: str) -> Optional[str]:
             if "content" in data:
                 return str(data["content"]).strip()
 
+        
             print("⚠ AI backend returned unexpected format")
+            print("DEBUG AI RESPONSE: ",data)
             return None
 
         except requests.exceptions.Timeout:
