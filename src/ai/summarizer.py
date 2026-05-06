@@ -59,6 +59,12 @@ def _ai_generate(prompt: str) -> Optional[str]:
             if "choices" in data and data["choices"]:
                 return data["choices"][0]["message"]["content"].strip()
 
+            if "response" in data:
+                return str(data["response"]).strip()
+
+            if "content" in data:
+                return str(data["content"]).strip()
+
             print("⚠ AI backend returned unexpected format")
             return None
 
@@ -90,10 +96,11 @@ def _safe_json_extract(text: str):
         return None
 
     # Remove markdown ``` blocks
-    text = re.sub(r"```.*?```", "", text, flags=re.S)
+    text = text.replace("```json","")
+    text = text.replace("```","")
 
     # Find first {...} block
-    match = re.search(r"\{.*\}", text, re.S)
+    match = re.search(r"\{.*\}", text)
 
     if not match:
         return None
@@ -114,7 +121,7 @@ def batch_ai_analysis(issues: List[Dict]) -> Dict:
         return {}
 
     final_results = {}
-    CHUNK_SIZE = 9   # 🔴 critical: keep small
+    CHUNK_SIZE = 5   # 🔴 critical: keep small
 
     issue_index = 1
 
@@ -158,7 +165,7 @@ Issue: {issue.get('issue')}
 Rule ID: {issue.get('rule_id')}
 Package: {issue.get('package')}
 Fixed Version: {issue.get('fixed_version')}
-Snippet: {(issue.get('snippet') or '')[:200]}
+Snippet: {(issue.get('snippet') or '')[:145]}
 """
             issue_index += 1
 
