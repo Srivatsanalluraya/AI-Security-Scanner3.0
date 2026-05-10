@@ -422,7 +422,7 @@ def generate_summary(issues: List[Dict], ai_map: Dict) -> str:
         impact = ai.get("impact") or fallback_impact(issue)
         fix = ai.get("fix") or fallback_fix(issue)
 
-        desc = issue.get("issue", "")[:100]
+        desc = issue.get("issue", "")[:200]
 
         lines.append(f"Issue #{i}:")
         lines.append(f"  Description: {desc}")
