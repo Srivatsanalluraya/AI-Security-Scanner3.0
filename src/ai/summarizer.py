@@ -79,6 +79,24 @@ def _ai_generate(prompt: str) -> Optional[str]:
     print("⚠ AI backend unavailable, fallback mode")
     return None
 
+def extract_pip_severity(vuln: Dict) -> str:
+
+    text = (
+        str(vuln.get("description", "")) +
+        " " +
+        str(vuln.get("id", ""))
+    ).upper()
+
+    if any(x in text for x in ["CRITICAL", "CVSS:9", "CVSS 9"]):
+        return "HIGH"
+
+    if any(x in text for x in ["HIGH", "CVSS:7", "CVSS 7"]):
+        return "HIGH"
+
+    if any(x in text for x in ["MEDIUM", "MODERATE", "CVSS:4"]):
+        return "MEDIUM"
+
+    return "LOW"
 
 # ===============================
 # Batch AI Analyzer (NEW)
@@ -364,7 +382,7 @@ def extract_all_issues(report_dir) -> List[Dict]:
                     "file": "requirements.txt",
                     "line": 0,
                     "issue": f"{v.get('id')} - {v.get('description')}",
-                    "severity": "MEDIUM",
+                    "severity": extract_pip_severity(v),
                     "fix": f"Update {dep.get('name')}",
                     "package": dep.get("name"),
                     "fixed_version": v.get("fix_versions"),
@@ -422,7 +440,7 @@ def generate_summary(issues: List[Dict], ai_map: Dict) -> str:
         impact = ai.get("impact") or fallback_impact(issue)
         fix = ai.get("fix") or fallback_fix(issue)
 
-        desc = issue.get("issue", "")[:200]
+        desc = issue.get("issue", "").replace("\n", " ").strip()
 
         lines.append(f"Issue #{i}:")
         lines.append(f"  Description: {desc}")
