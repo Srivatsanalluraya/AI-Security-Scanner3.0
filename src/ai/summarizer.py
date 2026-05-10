@@ -1,10 +1,8 @@
+````python
 #!/usr/bin/env python3
+
 """
-Structured AI summarizer (Optimized + Batched)
-- Extracts issues
-- Uses secure backend AI
-- Batches AI calls to avoid rate limits
-- Generates summary + detailed reports
+Structured AI summarizer (Improved Descriptions + Batched AI)
 """
 
 import json
@@ -28,12 +26,79 @@ AI_ENABLED = True
 TIMEOUT = 90
 RETRIES = 3
 
-# Limit batch size (prevents token overflow)
 MAX_AI_ISSUES = int(os.getenv("AI_MAX_ISSUES", 30))
 
 
 # ===============================
-# AI Backend Call
+# Utilities
+# ===============================
+
+def clean_text(text: str) -> str:
+
+    if not text:
+        return ""
+
+    text = text.replace("\n", " ")
+    text = text.replace("\r", " ")
+
+    # Remove markdown headings
+    text = re.sub(r'#+\s*', '', text)
+
+    # Normalize spaces
+    text = re.sub(r'\s+', ' ', text)
+
+    return text.strip()
+
+
+def load_json(path):
+
+    if not Path(path).exists():
+        return None
+
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def extract_severity_level(severity_str: str) -> str:
+
+    if not severity_str:
+        return "MEDIUM"
+
+    sev = str(severity_str).upper()
+
+    if any(x in sev for x in ["HIGH", "CRITICAL", "ERROR"]):
+        return "HIGH"
+
+    elif any(x in sev for x in ["MEDIUM", "WARNING"]):
+        return "MEDIUM"
+
+    return "LOW"
+
+
+def extract_pip_severity(vuln: Dict) -> str:
+
+    text = (
+        str(vuln.get("description", "")) +
+        " " +
+        str(vuln.get("id", ""))
+    ).upper()
+
+    if any(x in text for x in ["CRITICAL", "CVSS:9", "CVSS 9"]):
+        return "HIGH"
+
+    if any(x in text for x in ["HIGH", "CVSS:7", "CVSS 7"]):
+        return "HIGH"
+
+    if any(x in text for x in ["MEDIUM", "MODERATE", "CVSS:4"]):
+        return "MEDIUM"
+
+    return "LOW"
+
+
+# ===============================
+# AI Backend
 # ===============================
 
 def _ai_generate(prompt: str) -> Optional[str]:
@@ -65,9 +130,7 @@ def _ai_generate(prompt: str) -> Optional[str]:
             if "content" in data:
                 return str(data["content"]).strip()
 
-        
             print("⚠ AI backend returned unexpected format")
-            print("DEBUG AI RESPONSE: ",data)
             return None
 
         except requests.exceptions.Timeout:
@@ -76,85 +139,57 @@ def _ai_generate(prompt: str) -> Optional[str]:
         except Exception as e:
             print("⚠ AI backend failed:", e)
 
-    print("⚠ AI backend unavailable, fallback mode")
+    print("⚠ AI backend unavailable")
     return None
 
-def extract_pip_severity(vuln: Dict) -> str:
-
-    text = (
-        str(vuln.get("description", "")) +
-        " " +
-        str(vuln.get("id", ""))
-    ).upper()
-
-    if any(x in text for x in ["CRITICAL", "CVSS:9", "CVSS 9"]):
-        return "HIGH"
-
-    if any(x in text for x in ["HIGH", "CVSS:7", "CVSS 7"]):
-        return "HIGH"
-
-    if any(x in text for x in ["MEDIUM", "MODERATE", "CVSS:4"]):
-        return "MEDIUM"
-
-    return "LOW"
 
 # ===============================
-# Batch AI Analyzer (NEW)
+# JSON Extractor
 # ===============================
-def chunked(iterable, size):
-    for i in range(0, len(iterable), size):
-        yield iterable[i:i + size]
-
-
 
 def _safe_json_extract(text: str):
-    """
-    Robust JSON extractor for AI responses
-    """
 
     if not text:
         return None
 
-    # Remove markdown fences only
     text = text.replace("```json", "")
     text = text.replace("```", "")
     text = text.strip()
 
-    # Try direct parse first
     try:
         return json.loads(text)
     except Exception:
         pass
 
-    # Fallback: extract largest JSON object
     match = re.search(r'\{[\s\S]*\}', text)
 
     if not match:
         return None
 
-    json_text = match.group(0)
-
     try:
-        return json.loads(json_text)
-    except Exception as e:
-        print("⚠ JSON extraction failed:", str(e))
-        print("DEBUG RAW AI TEXT:", text[:1000])
+        return json.loads(match.group(0))
+    except Exception:
         return None
 
+
+# ===============================
+# Batch AI
+# ===============================
+
+def chunked(iterable, size):
+    for i in range(0, len(iterable), size):
+        yield iterable[i:i + size]
+
+
 def batch_ai_analysis(issues: List[Dict]) -> Dict:
-    """
-    Chunked batch AI analysis (optimized + rate-limit safe)
-    """
 
     if not AI_ENABLED or not issues:
         return {}
 
     final_results = {}
 
-    # Keep conservative for Groq TPM limits
     CHUNK_SIZE = 5
 
-    # Limit total AI analyzed issues
     issues = issues[:15]
 
     issue_index = 1
@@ -169,8 +204,6 @@ For each issue return:
 - specific fix
 
 Use concise actionable fixes.
-You MUST return results for EVERY ISSUE NUMBER provided.
-Do NOT SKIP any issues
 Return ONLY valid JSON.
 
 Format:
@@ -181,11 +214,7 @@ Format:
 Issues:
 """
 
-        local_map = {}
-
         for issue in chunk:
-
-            local_map[str(issue_index)] = issue
 
             prompt += f"""
 {issue_index}.
@@ -196,18 +225,7 @@ Line: {issue.get('line')}
 Issue: {issue.get('issue')}
 """
 
-            # Optional compact fields
-            if issue.get("rule_id"):
-                prompt += f"Rule ID: {issue.get('rule_id')}\n"
-
-            if issue.get("package"):
-                prompt += f"Package: {issue.get('package')}\n"
-
-            if issue.get("fixed_version"):
-                prompt += f"Fixed Version: {issue.get('fixed_version')}\n"
-
-            # Keep snippet tiny
-            snippet = (issue.get("snippet") or "")[:300]
+            snippet = clean_text(issue.get("snippet", ""))[:300]
 
             if snippet:
                 prompt += f"Snippet: {snippet}\n"
@@ -217,60 +235,20 @@ Issue: {issue.get('issue')}
         response = _ai_generate(prompt)
 
         if not response:
-            print("⚠ AI returned empty chunk, skipping")
             continue
 
         data = _safe_json_extract(response)
 
         if not data:
-            print("⚠ Batch AI parse failed for chunk")
             continue
 
-        # Merge chunk results
-        for k, v in data.items():
-            final_results[k] = v
-
-    if final_results:
-        print(f"✓ AI batch processed {len(final_results)} issues")
-    else:
-        print("⚠ AI unavailable, using rule-based analysis")
+        final_results.update(data)
 
     return final_results
 
 
 # ===============================
-# Utilities
-# ===============================
-
-def load_json(path):
-
-    if not Path(path).exists():
-        return None
-
-    try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
-    except:
-        return None
-
-
-def extract_severity_level(severity_str: str) -> str:
-
-    if not severity_str:
-        return "MEDIUM"
-
-    sev = severity_str.upper()
-
-    if any(x in sev for x in ["HIGH", "CRITICAL", "ERROR"]):
-        return "HIGH"
-
-    elif any(x in sev for x in ["MEDIUM", "WARNING"]):
-        return "MEDIUM"
-
-    return "LOW"
-
-
-# ===============================
-# Fallback Rules
+# Fallback Logic
 # ===============================
 
 def fallback_impact(issue: Dict) -> str:
@@ -284,10 +262,10 @@ def fallback_impact(issue: Dict) -> str:
     if "password" in txt or "secret" in txt:
         return f"[{sev}] Credential exposure"
 
-    if "eval" in txt:
+    if "eval" in txt or "exec" in txt:
         return f"[{sev}] Arbitrary code execution"
 
-    if "crypto" in txt:
+    if "crypto" in txt or "hash" in txt:
         return f"[{sev}] Weak cryptography"
 
     if "dependency" in txt or "vulnerability" in txt:
@@ -304,16 +282,16 @@ def fallback_fix(issue: Dict) -> str:
         return "Use prepared statements"
 
     if "password" in txt:
-        return "Move secrets to env vars"
+        return "Move secrets to environment variables"
 
-    if "eval" in txt:
-        return "Remove eval/exec"
+    if "eval" in txt or "exec" in txt:
+        return "Avoid eval/exec and use safer alternatives"
 
-    if "crypto" in txt:
-        return "Use modern crypto"
+    if "crypto" in txt or "hash" in txt:
+        return "Use modern secure cryptographic algorithms"
 
     if "dependency" in txt or "vulnerability" in txt:
-        return "update vulneraable dependency to latest secure version"
+        return "Update vulnerable dependency to latest secure version"
 
     return "Follow secure coding practices"
 
@@ -326,62 +304,93 @@ def extract_all_issues(report_dir) -> List[Dict]:
 
     issues = []
 
+    # ==========================
     # Bandit
+    # ==========================
+
     bandit = load_json(f"{report_dir}/bandit-report.json")
 
     if bandit and "results" in bandit:
 
         for r in bandit["results"]:
 
+            issue_text = clean_text(r.get("issue_text", ""))
+
+            if r.get("more_info"):
+                issue_text += f" More Info: {clean_text(r.get('more_info'))}"
+
             issues.append({
                 "source": "Bandit",
                 "file": r.get("filename"),
                 "line": r.get("line_number"),
-                "issue": r.get("issue_text"),
+                "issue": issue_text,
                 "severity": extract_severity_level(
                     r.get("issue_severity")
                 ),
                 "rule_id": r.get("test_id"),
-                "snippet": r.get("code", ""),
+                "snippet": clean_text(r.get("code", "")),
             })
 
-
+    # ==========================
     # Semgrep
+    # ==========================
+
     semgrep = load_json(f"{report_dir}/semgrep-report.json")
 
     if semgrep and "results" in semgrep:
 
         for r in semgrep["results"]:
 
+            extra = r.get("extra", {})
+            metadata = extra.get("metadata", {})
+
+            issue_text = clean_text(extra.get("message", ""))
+
+            if metadata.get("cwe"):
+                issue_text += f" | CWE: {metadata.get('cwe')}"
+
+            if metadata.get("owasp"):
+                issue_text += f" | OWASP: {metadata.get('owasp')}"
+
             issues.append({
                 "source": "Semgrep",
                 "file": r.get("path"),
                 "line": r.get("start", {}).get("line"),
-                "issue": r.get("extra", {}).get("message"),
+                "issue": issue_text,
                 "severity": extract_severity_level(
-                    r.get("extra", {}).get("severity")
+                    extra.get("severity")
                 ),
                 "rule_id": r.get("check_id"),
-                "snippet": r.get("extra", {}).get("lines", ""),
+                "snippet": clean_text(extra.get("lines", "")),
             })
 
-
+    # ==========================
     # pip-audit
+    # ==========================
+
     pip_audit = load_json(f"{report_dir}/pip-audit-report.json")
 
     if pip_audit:
 
-        deps = pip_audit if isinstance(pip_audit, list) else pip_audit.get("dependencies", [])
+        deps = (
+            pip_audit
+            if isinstance(pip_audit, list)
+            else pip_audit.get("dependencies", [])
+        )
 
         for dep in deps:
 
             for v in dep.get("vulns", []):
 
+                desc = clean_text(v.get("description", ""))
+
+                issue_text = f"{v.get('id')} - {desc}"
+
                 issues.append({
                     "source": "pip-audit",
                     "file": "requirements.txt",
                     "line": 0,
-                    "issue": f"{v.get('id')} - {v.get('description')}",
+                    "issue": issue_text,
                     "severity": extract_pip_severity(v),
                     "fix": f"Update {dep.get('name')}",
                     "package": dep.get("name"),
@@ -415,7 +424,7 @@ def generate_detailed_report(issues: List[Dict], ai_map: Dict) -> Dict:
             "severity": issue.get("severity"),
             "file": issue.get("file"),
             "line": issue.get("line"),
-            "description": issue.get("issue"),
+            "description": clean_text(issue.get("issue", "")),
             "impact": impact,
             "fix": fix
         })
@@ -440,7 +449,7 @@ def generate_summary(issues: List[Dict], ai_map: Dict) -> str:
         impact = ai.get("impact") or fallback_impact(issue)
         fix = ai.get("fix") or fallback_fix(issue)
 
-        desc = issue.get("issue", "").replace("\n", " ").strip()
+        desc = clean_text(issue.get("issue", ""))
 
         lines.append(f"Issue #{i}:")
         lines.append(f"  Description: {desc}")
@@ -467,30 +476,20 @@ def main():
         print("⚠ No issues found")
 
         Path(f"{report_dir}/summary.txt").write_text("No issues\n")
+
         Path(f"{report_dir}/issues_detailed.json").write_text(
             json.dumps({"total_issues": 0}, indent=2)
         )
 
         return
 
-
-    # ---------------------------
-    # Batch AI (KEY CHANGE)
-    # ---------------------------
-
     print(f"🤖 Running batch AI on {min(len(issues), MAX_AI_ISSUES)} issues...")
 
     ai_map = batch_ai_analysis(issues)
 
-
-    # ---------------------------
-    # Generate Reports
-    # ---------------------------
-
     summary = generate_summary(issues, ai_map)
 
     detailed = generate_detailed_report(issues, ai_map)
-
 
     Path(f"{report_dir}/summary.txt").write_text(summary)
 
@@ -498,11 +497,10 @@ def main():
         json.dumps(detailed, indent=2)
     )
 
-
     print("✅ Summary written")
     print("✅ Detailed report written")
-    print("🚀 AI calls used: 1 (batched)")
 
 
 if __name__ == "__main__":
     main()
+````
