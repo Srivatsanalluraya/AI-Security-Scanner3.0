@@ -207,7 +207,7 @@ Issue: {issue.get('issue')}
                 prompt += f"Fixed Version: {issue.get('fixed_version')}\n"
 
             # Keep snippet tiny
-            snippet = (issue.get("snippet") or "")[:80]
+            snippet = (issue.get("snippet") or "")[:300]
 
             if snippet:
                 prompt += f"Snippet: {snippet}\n"
