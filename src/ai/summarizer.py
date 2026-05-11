@@ -302,6 +302,27 @@ def fallback_fix(issue: Dict) -> str:
 def extract_all_issues(report_dir) -> List[Dict]:
 
     issues = []
+    # ==========================
+    # Gitleaks
+    # ==========================
+
+    gitleaks = load_json(f"{report_dir}/gitleaks-report.json")
+
+    if gitleaks:
+
+        for r in gitleaks:
+
+            issues.append({
+                "source": "Gitleaks",
+                "file": r.get("File"),
+                "line": r.get("StartLine"),
+                "issue": clean_text(
+                    f"Hardcoded secret detected: {r.get('Description')}"
+                ),
+                "severity": "HIGH",
+                "rule_id": r.get("RuleID"),
+                "snippet": clean_text(r.get("Secret", "")),
+            })
 
     # ==========================
     # Bandit
