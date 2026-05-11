@@ -89,8 +89,16 @@ gitleaks dir "$SCAN_PATH" \
 # TruffleHog Secret Scan
 # ===============================
 echo "▶ TruffleHog (Advanced Secret Detection)"
+# Exclude noisy internal directories
+cat > /tmp/trufflehog-excludes.txt <<EOF
+.git
+node_modules
+dist
+build
+EOF 
 
 trufflehog filesystem "$SCAN_PATH" \
+  --exclude-paths /tmp/trufflehog-excludes.txt \
   --json > reports/trufflehog-report.json \
   || true
 
