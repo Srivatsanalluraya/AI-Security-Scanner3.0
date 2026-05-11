@@ -51,6 +51,14 @@ RUN pip install --no-cache-dir \
     requests \
     pytest
 
+#-------------------------------------------------
+# Install GitLeaks
+#------------------------------------------------
+RUN wget -qO /tmp/gitleaks.tar.gz \
+    https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_linux_x64.tar.gz \
+    && tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks \
+    && chmod +x /usr/local/bin/gitleaks \
+    && rm /tmp/gitleaks.tar.gz
 
 # ------------------------------------------------
 # Copy source files
