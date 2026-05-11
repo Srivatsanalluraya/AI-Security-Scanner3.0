@@ -54,6 +54,22 @@ sleep 5
 # Run Scanner
 # ===============================
 # ===============================
+# Install Node Dependencies
+# ===============================
+if [[ -f "$SCAN_PATH/package.json" ]]; then
+
+    echo ""
+    echo "▶ Node project detected - installing dependencies..."
+
+    cd "$SCAN_PATH"
+
+    npm install --silent || echo "⚠ npm install failed"
+
+    cd - > /dev/null
+fi
+
+
+# ===============================
 # Gitleaks Secret Scan
 # ===============================
 
