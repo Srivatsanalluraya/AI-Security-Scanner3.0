@@ -249,28 +249,51 @@ def collect_issues(scan_path=".") -> List[Dict]:
         print("⏭ Skipping RetireJS (no Node project)")
 
   
+
     # ---------------- TruffleHog ----------------
     print("▶ TruffleHog (Secrets)")
 
-    trufflehog = run_json([
-        "cat",
-        "reports/trufflehog-report.json"
-    ])
+    trufflehog_file = "reports/trufflehog-report.json"
 
-    if isinstance(trufflehog, list):
+    if os.path.exists(trufflehog_file):
 
-        for r in trufflehog:
+        with open(trufflehog_file, "r", encoding="utf-8") as f:
 
-            issues.append({
-                "source": "TruffleHog",
-                "issue": f"Secret detected: {r.get('DetectorName', 'Credential')}",
-                "file": r.get("SourceMetadata", {})
+            for line in f:
+
+                line = line.strip()
+
+                if not line:
+                    continue
+
+                try:
+                    r = json.loads(line)
+
+                    # Skip non-result logs
+                    if "SourceMetadata" not in r:
+                        continue
+
+                    file_path = (
+                        r.get("SourceMetadata", {})
                          .get("Data", {})
                          .get("Filesystem", {})
-                         .get("file", "Unknown"),
-                "line": 0,
-                "severity": "HIGH"
-            })
+                         .get("file", "Unknown")
+                    )
+
+                    detector = r.get("DetectorName", "Secret")
+
+                    issues.append({
+                        "source": "TruffleHog",
+                        "issue": f"Exposed secret detected ({detector})",
+                        "file": file_path,
+                        "line": 0,
+                        "severity": "HIGH"
+                    })
+
+                except Exception:
+                    pass
+
+
 
 
     
