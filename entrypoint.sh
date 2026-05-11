@@ -53,6 +53,20 @@ sleep 5
 # ===============================
 # Run Scanner
 # ===============================
+# ===============================
+# Gitleaks Secret Scan
+# ===============================
+
+echo "▶ Gitleaks (Secrets Detection)"
+
+mkdir -p reports
+
+gitleaks detect \
+  --source "$SCAN_PATH" \
+  --report-format json \
+  --report-path reports/gitleaks-report.json \
+  || true
+
 echo ""
 echo "▶ Running in-memory security + AI analysis..."
 
