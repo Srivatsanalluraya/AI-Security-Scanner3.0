@@ -59,6 +59,7 @@ sleep 5
 
 echo "▶ Gitleaks (Secrets Detection)"
 
+git config --global --add safe.directory /github/workspace
 mkdir -p reports
 
 gitleaks detect \
