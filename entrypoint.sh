@@ -68,6 +68,16 @@ if [[ -f "$SCAN_PATH/package.json" ]]; then
     cd - > /dev/null
 fi
 
+# ===============================
+# TruffleHog Secret Scan
+# ===============================
+echo "▶ TruffleHog (Advanced Secret Detection)"
+
+trufflehog filesystem "$SCAN_PATH" \
+  --json > reports/trufflehog-report.json \
+  || true
+
+
 
 # ===============================
 # Gitleaks Secret Scan
