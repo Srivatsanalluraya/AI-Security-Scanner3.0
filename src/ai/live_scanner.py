@@ -248,6 +248,33 @@ def collect_issues(scan_path=".") -> List[Dict]:
     else:
         print("⏭ Skipping RetireJS (no Node project)")
 
+  
+    # ---------------- TruffleHog ----------------
+    print("▶ TruffleHog (Secrets)")
+
+    trufflehog = run_json([
+        "cat",
+        "reports/trufflehog-report.json"
+    ])
+
+    if isinstance(trufflehog, list):
+
+        for r in trufflehog:
+
+            issues.append({
+                "source": "TruffleHog",
+                "issue": f"Secret detected: {r.get('DetectorName', 'Credential')}",
+                "file": r.get("SourceMetadata", {})
+                         .get("Data", {})
+                         .get("Filesystem", {})
+                         .get("file", "Unknown"),
+                "line": 0,
+                "severity": "HIGH"
+            })
+
+
+    
+
 
     return issues
 
