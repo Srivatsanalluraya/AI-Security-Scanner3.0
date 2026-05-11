@@ -54,11 +54,13 @@ RUN pip install --no-cache-dir \
 #-------------------------------------------------
 # Install GitLeaks
 #------------------------------------------------
-RUN wget -qO /tmp/gitleaks.tar.gz \
-    https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_linux_x64.tar.gz \
-    && tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks \
-    && chmod +x /usr/local/bin/gitleaks \
-    && rm /tmp/gitleaks.tar.gz
+RUN wget -O /tmp/gitleaks.tar.gz \ 
+    https://github.com/gitleaks/gitleaks/releases/download/v8.24.2/gitleaks_8.24.2_linux_x64.tar.gz \ 
+    && tar -xzf /tmp/gitleaks.tar.gz -C /tmp \ 
+    && mv /tmp/gitleaks /usr/local/bin/gitleaks \ 
+    && chmod +x /usr/local/bin/gitleaks \ 
+    && gitleaks version \ 
+    && rm -rf /tmp/gitleaks*
 
 # ------------------------------------------------
 # Copy source files
