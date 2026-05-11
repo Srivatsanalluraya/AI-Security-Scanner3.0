@@ -69,29 +69,29 @@ if [[ -f "$SCAN_PATH/package.json" ]]; then
 fi
 
 # ===============================
+# Prepare Reports Directory
+# ===============================
+mkdir -p reports
+
+# ===============================
+# Gitleaks Secret Scan
+# ===============================
+echo "▶ Gitleaks (Secrets Detection)"
+
+git config --global --add safe.directory /github/workspace
+
+gitleaks dir "$SCAN_PATH" \
+  --report-format json \
+  --report-path reports/gitleaks-report.json \
+  || true
+
+# ===============================
 # TruffleHog Secret Scan
 # ===============================
 echo "▶ TruffleHog (Advanced Secret Detection)"
 
 trufflehog filesystem "$SCAN_PATH" \
   --json > reports/trufflehog-report.json \
-  || true
-
-
-
-# ===============================
-# Gitleaks Secret Scan
-# ===============================
-
-echo "▶ Gitleaks (Secrets Detection)"
-
-git config --global --add safe.directory /github/workspace
-mkdir -p reports
-
-gitleaks detect \
-  --source "$SCAN_PATH" \
-  --report-format json \
-  --report-path reports/gitleaks-report.json \
   || true
 
 echo ""
