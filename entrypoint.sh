@@ -85,14 +85,6 @@ gitleaks dir "$SCAN_PATH" \
   --report-path reports/gitleaks-report.json \
   || true
 
-# ===============================
-# TruffleHog Secret Scan
-# ===============================
-echo "▶ TruffleHog (Advanced Secret Detection)"
-
-trufflehog filesystem "$SCAN_PATH" \
-  --json > reports/trufflehog-report.json \
-  || true
 
 echo ""
 echo "▶ Running in-memory security + AI analysis..."
