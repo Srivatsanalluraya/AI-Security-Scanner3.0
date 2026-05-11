@@ -61,12 +61,20 @@ RUN wget -O /tmp/gitleaks.tar.gz \
     && chmod +x /usr/local/bin/gitleaks \ 
     && gitleaks version \ 
     && rm -rf /tmp/gitleaks*
+
 # ------------------------------------------------
 # Install TruffleHog
 # ------------------------------------------------
-RUN curl -sSfL \
-https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh \
-| sh
+RUN wget -O /tmp/trufflehog.tar.gz \
+    https://github.com/trufflesecurity/trufflehog/releases/download/v3.88.18/trufflehog_3.88.18_linux_amd64.tar.gz \
+    && tar -xzf /tmp/trufflehog.tar.gz -C /tmp \
+    && mv /tmp/trufflehog /usr/local/bin/trufflehog \
+    && chmod +x /usr/local/bin/trufflehog \
+    && trufflehog --version \
+    && rm -rf /tmp/trufflehog*
+
+
+
 
 
 # ------------------------------------------------
