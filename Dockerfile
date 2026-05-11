@@ -61,6 +61,13 @@ RUN wget -O /tmp/gitleaks.tar.gz \
     && chmod +x /usr/local/bin/gitleaks \ 
     && gitleaks version \ 
     && rm -rf /tmp/gitleaks*
+# ------------------------------------------------
+# Install TruffleHog
+# ------------------------------------------------
+RUN curl -sSfL \
+https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh \
+| sh
+
 
 # ------------------------------------------------
 # Copy source files
